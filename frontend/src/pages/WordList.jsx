@@ -11,16 +11,21 @@ export default function WordList() {
   const [date, setDate] = useState('')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { fetchDates().then(d => setDates(d.dates)).catch(() => {}) }, [])
 
   useEffect(() => {
     setLoading(true)
-    fetchWords({ q, date, page }).then(data => {
-      setWords(data.words)
-      setTotalPages(data.pages)
-    }).finally(() => setLoading(false))
+    setError('')
+    fetchWords({ q, date, page })
+      .then(data => {
+        setWords(data.words)
+        setTotalPages(data.pages)
+      })
+      .catch(() => setError('加载失败，请确认后端服务是否运行'))
+      .finally(() => setLoading(false))
   }, [q, date, page])
 
   return (
@@ -42,9 +47,10 @@ export default function WordList() {
         <Link to="/word/new" className="btn btn-primary">+ 添加</Link>
       </div>
 
-      {loading ? (
+      {error && <div className="empty-state"><p>{error}</p></div>}
+      {!error && loading ? (
         <div className="loading">加载中…</div>
-      ) : words.length === 0 ? (
+      ) : !error && words.length === 0 ? (
         <div className="empty-state">
           <p>{q || date ? '无匹配单词' : '还没有单词'}</p>
           {q || date ? (
