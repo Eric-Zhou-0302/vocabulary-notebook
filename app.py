@@ -275,6 +275,11 @@ def _filter_words(data: dict, q: str, date: str) -> list:
 
 
 # ─── 静态文件（生产模式）──────────────────────────────────
+# 静态资源挂载必须在 catch-all 路由之前，否则 /assets/* 会被当 SPA 路由吞掉
+
+if STATIC_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+
 
 @app.get("/")
 async def serve_spa():
@@ -289,15 +294,11 @@ async def serve_spa():
 
 @app.get("/{full_path:path}")
 async def serve_spa_fallback(full_path: str):
-    """所有非 API 路径回退到 SPA，支持浏览器刷新和直接导航"""
+    """所有非 API/非静态资源路径回退到 SPA，支持浏览器刷新和直接导航"""
     index_path = STATIC_DIR / "index.html"
     if not index_path.exists():
         raise HTTPException(status_code=404, detail="前端未构建")
     return HTMLResponse(index_path.read_text(encoding="utf-8"))
-
-
-if STATIC_DIR.exists():
-    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
 
 # ─── 启动入口 ─────────────────────────────────────────────
