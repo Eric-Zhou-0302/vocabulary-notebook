@@ -12,7 +12,6 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from weasyprint import HTML
 
 # ─── App ──────────────────────────────────────────────────
 
@@ -148,6 +147,13 @@ def export_words(
         )
 
     if format == "pdf":
+        try:
+            from weasyprint import HTML
+        except OSError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"PDF 导出依赖缺失。请安装系统库: brew install pango gobject-introspection。错误: {e}",
+            )
         template_path = TEMPLATE_DIR / "pdf_export.html"
         if not template_path.exists():
             raise HTTPException(status_code=500, detail="PDF 模板不存在")
