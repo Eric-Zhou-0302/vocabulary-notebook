@@ -1,8 +1,10 @@
 """词汇笔记本 — FastAPI 后端"""
 import csv
+import html as html_mod
 import io
 import json
 import re
+import threading
 import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -35,22 +37,31 @@ TEMPLATE_DIR = Path("templates")
 
 
 def load_words() -> dict:
-    """读取 words.json，不存在或损坏时返回空数据"""
+    """读取 words.json，不存在时初始化，损坏时备份并返回空数据"""
     if not DATA_FILE.exists():
         save_words({"words": []})
         return {"words": []}
     try:
         return json.loads(DATA_FILE.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError):
+        backup = DATA_FILE.with_suffix(f".json.bak.{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        DATA_FILE.rename(backup)
         save_words({"words": []})
         return {"words": []}
 
 
+_write_lock = threading.Lock()
+
+
 def save_words(data: dict) -> None:
-    DATA_FILE.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    """原子写入：先写临时文件再替换，防止并发写丢数据和写入中断损坏"""
+    with _write_lock:
+        tmp = DATA_FILE.with_suffix(".tmp")
+        tmp.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        tmp.replace(DATA_FILE)
 
 
 def now_iso() -> str:
@@ -90,16 +101,10 @@ def list_words(
     q: str = Query(default=""),
     date: str = Query(default=""),
     page: int = Query(default=1, ge=1),
-    size: int = Query(default=20, ge=1, le=100),
+    size: int = Query(default=20, ge=1, le=10000),
 ):
     data = load_words()
-    words = data["words"]
-
-    if date:
-        words = [w for w in words if w["created_at"].startswith(date)]
-    if q:
-        ql = q.lower()
-        words = [w for w in words if ql in w["word"].lower() or ql in w["definition"].lower()]
+    words = _filter_words(data, q, date)
 
     total = len(words)
     start = (page - 1) * size
@@ -117,7 +122,11 @@ def list_words(
 @app.get("/api/dates")
 def list_dates():
     data = load_words()
-    dates = sorted({w["created_at"][:10] for w in data["words"]}, reverse=True)
+    dates = sorted({
+        w["created_at"][:10]
+        for w in data["words"]
+        if "created_at" in w
+    }, reverse=True)
     return {"dates": dates}
 
 
@@ -161,11 +170,15 @@ def export_words(
 
         cards = ""
         for item in words:
-            phonetic_line = f'  <span class="phonetic">{item["phonetic"]}</span>' if item["phonetic"] else ""
-            example_line = f'  <p class="example">"{item["example"]}"</p>' if item["example"] else ""
+            w_safe = html_mod.escape(item["word"])
+            d_safe = html_mod.escape(item["definition"])
+            p_safe = html_mod.escape(item.get("phonetic", ""))
+            e_safe = html_mod.escape(item.get("example", ""))
+            phonetic_line = f'  <span class="phonetic">{p_safe}</span>' if p_safe else ""
+            example_line = f'  <p class="example">"{e_safe}"</p>' if e_safe else ""
             cards += f"""<div class="card">
-  <div class="word">{item["word"]}{phonetic_line}</div>
-  <p class="definition">{item["definition"]}</p>
+  <div class="word">{w_safe}{phonetic_line}</div>
+  <p class="definition">{d_safe}</p>
 {example_line}</div>
 """
         html = html.replace("{{CARDS}}", cards)
@@ -271,6 +284,15 @@ async def serve_spa():
             status_code=404,
             detail="前端未构建。请运行: cd frontend && npm run build",
         )
+    return HTMLResponse(index_path.read_text(encoding="utf-8"))
+
+
+@app.get("/{full_path:path}")
+async def serve_spa_fallback(full_path: str):
+    """所有非 API 路径回退到 SPA，支持浏览器刷新和直接导航"""
+    index_path = STATIC_DIR / "index.html"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="前端未构建")
     return HTMLResponse(index_path.read_text(encoding="utf-8"))
 
 

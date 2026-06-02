@@ -15,15 +15,18 @@ export default function Review() {
   const [dates, setDates] = useState([])
   const [date, setDate] = useState('')
   const [q, setQ] = useState('')
+  const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { fetchDates().then(d => setDates(d.dates)).catch(() => {}) }, [])
 
   useEffect(() => {
     setLoading(true)
-    fetchWords({ q, date, size: 999 }).then(data => {
-      setWords(data.words)
-    }).finally(() => setLoading(false))
+    setError('')
+    fetchWords({ q, date, size: 10000 })
+      .then(data => setWords(data.words))
+      .catch(() => setError('加载失败，请确认后端服务是否运行'))
+      .finally(() => setLoading(false))
   }, [q, date])
 
   return (
@@ -53,9 +56,10 @@ export default function Review() {
         </div>
       )}
 
-      {loading ? (
+      {error && <div className="empty-state"><p>{error}</p></div>}
+      {!error && loading ? (
         <div className="loading">加载中…</div>
-      ) : words.length === 0 ? (
+      ) : !error && words.length === 0 ? (
         <div className="empty-state"><p>没有单词可供复习</p></div>
       ) : tab === 'browse' ? (
         words.map(w => (
