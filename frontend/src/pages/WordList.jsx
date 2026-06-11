@@ -108,6 +108,12 @@ export default function WordList() {
         <div className="loading">加载中…</div>
       ) : !error && words.length === 0 ? (
         <div className="empty-state">
+          <svg className="empty-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="8" y="6" width="28" height="36" rx="3" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M1314h18M13 20h18M13 26h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <circle cx="36" cy="36" r="9" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M3336h6M36 33v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
           <p>{q || date ? '无匹配单词' : '还没有单词'}</p>
           {q || date ? (
             <button className="btn btn-ghost" onClick={() => { setQ(''); setDate('') }}>
@@ -119,7 +125,7 @@ export default function WordList() {
         </div>
       ) : (
         <>
-          {words.map(w => <WordCard key={w.id} word={w} />)}
+          {words.map((w, i) => <WordCard key={w.id} word={w} index={i} />)}
           {totalPages > 1 && (
             <div className="pagination">
               <button

@@ -147,15 +147,28 @@ a { color: inherit; text-decoration: none; }
   border-radius: 2px;
   padding: 18px 22px;
   margin-bottom: 2px;
-  transition: background 0.2s, border-color 0.2s, transform 0.2s var(--ease-out);
+  transition: background 0.2s, border-color 0.2s, transform 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out);
   position: relative;
   /* 卡片间无间距，靠 1px border 累加成 2px 的分割线效果 */
+  /* 入场动画 */
+  opacity: 0;
+  transform: translateY(8px);
+  animation: cardReveal 0.4s var(--ease-out) forwards;
+  animation-delay: calc(var(--card-index, 0) * 35ms);
+}
+
+@keyframes cardReveal {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .word-card:hover {
   background: var(--surface-raised);
-  border-color: var(--border-light);
-  transform: translateX(4px);
+  border-color: var(--accent-dim);
+  transform: translateY(-2px) translateX(2px);
+  box-shadow: -3px 0 0 0 var(--accent), 0 4px 20px rgba(0,0,0,0.25);
 }
 
 /* 列表首尾卡片的圆角 */
@@ -203,10 +216,20 @@ a { color: inherit; text-decoration: none; }
   text-align: center;
   padding: 80px 20px;
   color: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.empty-icon {
+  width: 56px;
+  height: 56px;
+  color: var(--text-muted);
+  opacity: 0.5;
 }
 .empty-state p {
   font-size: 15px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 .empty-state a {
   color: var(--accent);
@@ -376,34 +399,58 @@ select option { background: var(--surface); color: var(--text); }
 /* ─── Enrich Progress ────────────────────── */
 .enrich-progress {
   margin-bottom: 20px;
-  padding: 12px 16px;
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
-.enrich-progress-info {
+.enrich-line-wrap {
+  position: relative;
+}
+.enrich-line {
+  position: relative;
+  height: 1px;
+  background: var(--border);
+}
+.enrich-line-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.5s var(--ease-out);
+}
+.enrich-line-dot {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  animation: dotPulse 1.2s ease-in-out infinite;
+  box-shadow: 0 0 0 0 var(--accent-dim);
+}
+@keyframes dotPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(212, 168, 83, 0.4); }
+  70%  { box-shadow: 0 0 0 6px rgba(212, 168, 83, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(212, 168, 83, 0); }
+}
+.enrich-meta {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 12px;
-  color: var(--text-dim);
-  margin-bottom: 8px;
 }
-.enrich-progress-pct {
-  font-variant-numeric: tabular-nums;
+.enrich-status {
+  font-size: 11px;
   color: var(--text-muted);
+  letter-spacing: 0.04em;
+  font-family: var(--font-display);
+  font-style: italic;
 }
-.enrich-progress-bar {
-  height: 3px;
-  background: var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.enrich-progress-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 2px;
-  transition: width 0.4s var(--ease-out);
+.enrich-pct {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ─── Pagination ─────────────────────────── */

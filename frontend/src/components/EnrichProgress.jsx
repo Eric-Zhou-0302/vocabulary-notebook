@@ -12,28 +12,34 @@ export default function EnrichProgress({ active }) {
 
   return (
     <div className="enrich-progress">
-      <div className="enrich-progress-info">
-        <span>
-          {progress.is_processing && progress.current_word
-            ? `正在补全：${progress.current_word}`
-            : progress.queue_size > 0
-            ? `队列中 ${progress.queue_size} 个单词…`
-            : progress.batch_total > 0
-            ? `已完成 ${progress.batch_done}/${progress.batch_total}`
-            : '准备中…'}
-        </span>
-        {progress.batch_total > 0 && (
-          <span className="enrich-progress-pct">{percent}%</span>
-        )}
-      </div>
-      {progress.batch_total > 0 && (
-        <div className="enrich-progress-bar">
+      <div className="enrich-line-wrap">
+        <div className="enrich-line">
+          {progress.is_processing && (
+            <div
+              className="enrich-line-dot"
+              style={{ left: `${percent}%` }}
+            />
+          )}
           <div
-            className="enrich-progress-fill"
+            className="enrich-line-fill"
             style={{ width: `${percent}%` }}
           />
         </div>
-      )}
+      </div>
+      <div className="enrich-meta">
+        <span className="enrich-status">
+          {progress.is_processing && progress.current_word
+            ? progress.current_word
+            : progress.queue_size > 0
+            ? `${progress.queue_size} 个在队列中`
+            : progress.batch_total > 0
+            ? `${progress.batch_done}/${progress.batch_total} 已完成`
+            : '准备中…'}
+        </span>
+        {progress.batch_total > 0 && (
+          <span className="enrich-pct">{percent}%</span>
+        )}
+      </div>
     </div>
   )
 }
