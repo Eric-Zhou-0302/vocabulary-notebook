@@ -1,0 +1,11 @@
+{
+  "provider": "ollama",
+  "ollama": {
+    "url": "http://localhost:11434/api/generate",
+    "model": "gemma4:26b"
+  },
+  "deepseek": {
+    "api_key": "",
+    "model": ""
+  }
+}
