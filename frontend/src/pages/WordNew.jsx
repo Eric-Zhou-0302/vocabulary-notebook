@@ -1,12 +1,27 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createWord } from '../api'
+
+function useProviderLabel() {
+  const [label, setLabel] = useState('模型')
+  useEffect(() => {
+    fetch('/api/health')
+      .then(r => r.json())
+      .then(d => {
+        const p = d.provider
+        setLabel(p === 'ollama' ? 'Ollama' : p === 'deepseek' ? 'DeepSeek' : p || '模型')
+      })
+      .catch(() => {})
+  }, [])
+  return label
+}
 
 export default function WordNew() {
   const [word, setWord] = useState('')
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState(null)
   const navigate = useNavigate()
+  const providerLabel = useProviderLabel()
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -61,7 +76,7 @@ export default function WordNew() {
           </button>
         </div>
         <p style={{ marginTop: 14, fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
-          Enter 保存 · Esc 返回 · 释义/音标/例句由 Ollama 自动补充
+          Enter 保存 · Esc 返回 · 释义/音标/例句由 {providerLabel} 自动补充
         </p>
       </form>
     </div>
