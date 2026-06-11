@@ -80,22 +80,23 @@ if not os.path.exists(_CJK_FONT_PATH):
     _CJK_FONT_PATH = None  # 兜底：中文显示为空白，但不会崩溃
 
 
-def load_words() -> dict:
-    """读取 words.json，不存在时初始化，损坏时备份并返回空数据"""
-    if not DATA_FILE.exists():
-        save_words({"words": []})
-        return {"words": []}
-    try:
-        return json.loads(DATA_FILE.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        backup = DATA_FILE.with_suffix(f".json.bak.{datetime.now().strftime('%Y%m%d_%H%M%S')}")
-        DATA_FILE.rename(backup)
-        save_words({"words": []})
-        return {"words": []}
-
-
 # RLock 允许同一线程重入，_enrich_in_background 可在锁内 load+save
 _write_lock = threading.RLock()
+
+
+def load_words() -> dict:
+    """读取 words.json，不存在时初始化，损坏时备份并返回空数据"""
+    with _write_lock:
+        if not DATA_FILE.exists():
+            save_words({"words": []})
+            return {"words": []}
+        try:
+            return json.loads(DATA_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            backup = DATA_FILE.with_suffix(f".json.bak.{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+            DATA_FILE.rename(backup)
+            save_words({"words": []})
+            return {"words": []}
 
 
 def save_words(data: dict) -> None:
@@ -115,6 +116,9 @@ def now_iso() -> str:
 
 async def enrich_word(word: str) -> tuple[str, str, str]:
     """调用配置好的 Provider 补充音标、释义和例句，返回 (phonetic, definition, example)。失败返回空串。"""
+    import logging
+    logger = logging.getLogger("uvicorn")
+
     prompt = (
         f'For the English word "{word}", provide:\n'
         f'1. IPA phonetic transcription\n'
@@ -156,16 +160,18 @@ async def enrich_word(word: str) -> tuple[str, str, str]:
                 text = resp.json()["choices"][0]["message"]["content"].strip()
 
         match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
-        if match:
-            data = json.loads(match.group())
-            return (
-                data.get("phonetic", ""),
-                data.get("definition", ""),
-                data.get("example", ""),
-            )
-    except Exception:
-        pass
-    return "", "", ""
+        if not match:
+            logger.warning(f"[enrich] {word} — 响应中未找到 JSON 对象：{text[:200]}")
+            return "", "", ""
+        data = json.loads(match.group())
+        return (
+            data.get("phonetic", ""),
+            data.get("definition", ""),
+            data.get("example", ""),
+        )
+    except Exception as e:
+        logger.warning(f"[enrich] {word} — 请求失败：{type(e).__name__}: {e}")
+        return "", "", ""
 
 
 # ─── API: SSE 事件流 ──────────────────────────────────────
