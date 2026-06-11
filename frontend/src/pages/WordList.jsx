@@ -4,6 +4,7 @@ import { fetchWords, fetchDates, enrichMissing } from '../api'
 import { useSSE } from '../useSSE'
 import WordCard from '../components/WordCard'
 import ExportMenu from '../components/ExportMenu'
+import EnrichProgress from '../components/EnrichProgress'
 
 export default function WordList() {
   const [words, setWords] = useState([])
@@ -16,6 +17,7 @@ export default function WordList() {
   const [loading, setLoading] = useState(true)
   const [enriching, setEnriching] = useState(false)
   const [toast, setToast] = useState('')
+  const [sseDisconnected, setSseDisconnected] = useState(false)
 
   useEffect(() => { fetchDates().then(d => setDates(d.dates)).catch(() => {}) }, [])
 
@@ -38,7 +40,10 @@ export default function WordList() {
     ))
   }, [])
 
-  useSSE(handleEnriched)
+  useSSE({
+    onEnriched: handleEnriched,
+    onDisconnect: () => setSseDisconnected(true),
+  })
 
   const hasMissing = !loading && words.some(w => !w.definition)
 
@@ -49,6 +54,7 @@ export default function WordList() {
       return
     }
     setEnriching(true)
+    setSseDisconnected(false)
     setToast('')
     try {
       const result = await enrichMissing()
@@ -65,6 +71,11 @@ export default function WordList() {
   return (
     <div>
       {toast && <div className="toast toast-info">{toast}</div>}
+      {sseDisconnected && (
+        <div className="toast toast-warn">
+          实时连接已断开，补全进度可能不会自动更新
+       </div>
+      )}
       <div className="toolbar">
         <input
           type="text"
@@ -89,6 +100,8 @@ export default function WordList() {
         <ExportMenu q={q} date={date} />
         <Link to="/word/new" className="btn btn-primary">+ 添加</Link>
       </div>
+
+      <EnrichProgress active={enriching} />
 
       {error && <div className="empty-state"><p>{error}</p></div>}
       {!error && loading ? (
