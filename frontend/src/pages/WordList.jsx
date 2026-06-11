@@ -31,7 +31,7 @@ export default function WordList() {
       .finally(() => setLoading(false))
   }, [q, date, page])
 
-  // SSE 实时更新 — Ollama 补充数据后无需刷新
+  // SSE 实时更新 — 模型补充数据后无需刷新
   const handleEnriched = useCallback((wordId, data) => {
     setWords(prev => prev.map(w =>
       w.id === wordId ? { ...w, ...data } : w

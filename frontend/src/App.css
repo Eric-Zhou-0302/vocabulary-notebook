@@ -817,7 +817,7 @@ select option { background: var(--surface); color: var(--text); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ─── Ollama Status ──────────────────────── */
+/* ─── Model Status ──────────────────────── */
 .model-status {
   display: inline-flex;
   align-items: center;
