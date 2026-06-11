@@ -21,13 +21,12 @@
 
 ```bash
 # 1. 克隆
-git clone https://github.com/YOUR_USERNAME/vocabulary-notebook.git
+git clone https://github.com/Eric-Zhou-0302/vocabulary-notebook.git
 cd vocabulary-notebook
 
 # 2. 后端
 pip install -r requirements.txt
 cp config.json.example config.json
-# 编辑 config.json → 设置你的 Ollama URL 和模型
 
 # 3. 前端
 cd frontend && npm install && npm run build && cd ..
@@ -37,22 +36,39 @@ python app.py
 # → 访问 http://localhost:1400
 ```
 
-**Ollama 配置**（本地模型）：
-```bash
-ollama run gemma4:26b
+## 配置 LLM Provider
+
+编辑 `config.json`，支持两种 Provider：
+
+### Ollama（本地，免费）
+
+```json
+{
+  "provider": "ollama",
+  "ollama": {
+    "url": "http://localhost:11434/api/generate",
+    "model": "gemma4:26b"
+  }
+}
 ```
 
-**DeepSeek 配置**（云端）：
+1. 确保 Ollama 运行中：`ollama serve`（或系统已自启动）
+2. 下载并运行模型：`ollama run gemma4:26b`（支持任意模型，换模型后同步修改 `config.json` 中的 `model` 字段）
+3. 验证连接：`curl http://localhost:11434/api/tags`（返回模型列表即正常）
+
+### DeepSeek（云端，按量付费）
+
 ```json
-// config.json
 {
   "provider": "deepseek",
   "deepseek": {
-    "api_key": "sk-...",
+    "api_key": "sk-你的key",
     "model": "deepseek-chat"
   }
 }
 ```
+
+从 [DeepSeek API Keys](https://platform.deepseek.com/api_keys) 获取 key。
 
 ## 系统架构
 
