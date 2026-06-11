@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { fetchWords, fetchDates } from '../api'
+import { useSSE } from '../useSSE'
 import Flashcard from '../components/Flashcard'
 import SpellingTest from '../components/SpellingTest'
 
@@ -28,6 +29,14 @@ export default function Review() {
       .catch(() => setError('加载失败，请确认后端服务是否运行'))
       .finally(() => setLoading(false))
   }, [q, date])
+
+  const handleEnriched = useCallback((wordId, data) => {
+    setWords(prev => prev.map(w =>
+      w.id === wordId ? { ...w, ...data } : w
+    ))
+  }, [])
+
+  useSSE(handleEnriched)
 
   return (
     <div>
@@ -69,7 +78,7 @@ export default function Review() {
               {w.phonetic && <span className="phonetic">{w.phonetic}</span>}
             </div>
             <div className="definition">{w.definition}</div>
-            {w.example && <div className="example-display" style={{ marginTop: 8, color: '#888' }}>"{w.example}"</div>}
+            {w.example && <div className="example-display">"{w.example}"</div>}
           </div>
         ))
       ) : tab === 'flashcard' ? (
