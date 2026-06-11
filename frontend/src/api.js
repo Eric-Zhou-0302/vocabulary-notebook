@@ -7,7 +7,9 @@ async function request(url, options = {}) {
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || '请求失败')
+    const error = new Error(err.detail || '请求失败')
+    error.status = res.status
+    throw error
   }
   return res
 }
@@ -28,7 +30,7 @@ export async function fetchWord(id) {
   return res.json()
 }
 
-export async function createWord(word, definition) {
+export async function createWord(word, definition = '') {
   const res = await request('/words', {
     method: 'POST',
     body: JSON.stringify({ word, definition }),
@@ -51,4 +53,9 @@ export async function deleteWord(id) {
 export function exportUrl(format, { q = '', date = '' } = {}) {
   const params = new URLSearchParams({ format, q, date })
   return `${BASE}/words/export?${params}`
+}
+
+export async function enrichMissing() {
+  const res = await request('/words/enrich-missing', { method: 'POST' })
+  return res.json()
 }

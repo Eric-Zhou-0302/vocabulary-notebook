@@ -4,31 +4,35 @@ import { createWord } from '../api'
 
 export default function WordNew() {
   const [word, setWord] = useState('')
-  const [definition, setDefinition] = useState('')
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState(null)
   const navigate = useNavigate()
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!word.trim() || !definition.trim()) return
+    if (!word.trim()) return
     setLoading(true)
     try {
-      const result = await createWord(word, definition)
-      if (!result.enriched && result.word.phonetic === '') {
-        setToast({ type: 'warn', msg: '音标例句补充失败，可稍后重试' })
-        setTimeout(() => {
-          setToast(null)
-          navigate('/')
-        }, 1500)
-      } else {
-        navigate('/')
-      }
+      await createWord(word.trim())
+      setWord('')
+      setToast({ type: 'info', msg: `「${word.trim()}」已保存` })
+      setTimeout(() => setToast(null), 2000)
     } catch (err) {
-      setToast({ type: 'error', msg: err.message })
+      if (err.status === 409) {
+        setToast({ type: 'warn', msg: err.message })
+      } else {
+        setToast({ type: 'error', msg: err.message })
+      }
       setTimeout(() => setToast(null), 3000)
     } finally {
       setLoading(false)
+    }
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      navigate('/')
     }
   }
 
@@ -43,17 +47,9 @@ export default function WordNew() {
             type="text"
             value={word}
             onChange={e => setWord(e.target.value)}
-            placeholder="输入英文单词"
+            onKeyDown={handleKeyDown}
+            placeholder="输入英文单词，回车保存"
             autoFocus
-          />
-        </div>
-        <div className="form-group">
-          <label>释义</label>
-          <input
-            type="text"
-            value={definition}
-            onChange={e => setDefinition(e.target.value)}
-            placeholder="输入中文释义"
           />
         </div>
         <div className="btn-group">
@@ -64,6 +60,9 @@ export default function WordNew() {
             取消
           </button>
         </div>
+        <p style={{ marginTop: 14, fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
+          Enter 保存 · Esc 返回 · 释义/音标/例句由 Ollama 自动补充
+        </p>
       </form>
     </div>
   )

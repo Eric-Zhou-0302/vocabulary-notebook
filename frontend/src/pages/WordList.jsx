@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchWords, fetchDates } from '../api'
+import { fetchWords, fetchDates, enrichMissing } from '../api'
+import { useSSE } from '../useSSE'
 import WordCard from '../components/WordCard'
 import ExportMenu from '../components/ExportMenu'
 
@@ -13,6 +14,8 @@ export default function WordList() {
   const [totalPages, setTotalPages] = useState(1)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [enriching, setEnriching] = useState(false)
+  const [toast, setToast] = useState('')
 
   useEffect(() => { fetchDates().then(d => setDates(d.dates)).catch(() => {}) }, [])
 
@@ -28,8 +31,40 @@ export default function WordList() {
       .finally(() => setLoading(false))
   }, [q, date, page])
 
+  // SSE 实时更新 — Ollama 补充数据后无需刷新
+  const handleEnriched = useCallback((wordId, data) => {
+    setWords(prev => prev.map(w =>
+      w.id === wordId ? { ...w, ...data } : w
+    ))
+  }, [])
+
+  useSSE(handleEnriched)
+
+  const hasMissing = !loading && words.some(w => !w.definition)
+
+  async function handleEnrichMissing() {
+    if (!hasMissing) {
+      setToast('当前列表没有需要补全的单词')
+      setTimeout(() => setToast(''), 3000)
+      return
+    }
+    setEnriching(true)
+    setToast('')
+    try {
+      const result = await enrichMissing()
+      setToast(result.message)
+      setTimeout(() => setToast(''), 4000)
+    } catch {
+      setToast('补全请求失败，请确认后端运行中')
+      setTimeout(() => setToast(''), 4000)
+    } finally {
+      setEnriching(false)
+    }
+  }
+
   return (
     <div>
+      {toast && <div className="toast toast-info">{toast}</div>}
       <div className="toolbar">
         <input
           type="text"
@@ -43,6 +78,14 @@ export default function WordList() {
             <option key={d} value={d}>{d}</option>
           ))}
         </select>
+        <button
+          className="btn btn-secondary"
+          onClick={handleEnrichMissing}
+          disabled={enriching || !hasMissing}
+          title={!hasMissing ? '当前列表所有单词已补全' : undefined}
+        >
+          {enriching ? '补全中…' : '补全缺失'}
+        </button>
         <ExportMenu q={q} date={date} />
         <Link to="/word/new" className="btn btn-primary">+ 添加</Link>
       </div>

@@ -3,6 +3,8 @@ import WordList from './pages/WordList'
 import WordNew from './pages/WordNew'
 import WordDetail from './pages/WordDetail'
 import Review from './pages/Review'
+import ThemeToggle from './components/ThemeToggle'
+import ModelStatus from './components/ModelStatus'
 
 export default function App() {
   const location = useLocation()
@@ -10,9 +12,12 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1 className="app-title">
-          <Link to="/">词汇笔记本</Link>
-        </h1>
+        <div>
+          <h1 className="app-title">
+            <Link to="/">词汇笔记本</Link>
+          </h1>
+          <ModelStatus />
+        </div>
         <nav className="app-nav">
           <Link to="/" className={location.pathname === '/' ? 'active' : ''}>
             单词列表
@@ -23,6 +28,7 @@ export default function App() {
           <Link to="/review" className={location.pathname === '/review' ? 'active' : ''}>
             复习
           </Link>
+          <ThemeToggle />
         </nav>
       </header>
       <main className="app-main">
