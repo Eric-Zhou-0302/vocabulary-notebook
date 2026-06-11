@@ -71,6 +71,10 @@ _enrich_queue: Optional[asyncio.Queue] = None
 # word_id → 上次尝试时间戳，冷却期内不重复入队
 _enriching_ids: dict[str, float] = {}
 _ENRICH_COOLDOWN = 300  # 秒
+# 进度追踪
+_enrich_current: Optional[str] = None
+_enrich_batch_total: int = 0
+_enrich_batch_done: int = 0
 
 
 # ─── PDF 字体路径 (fpdf2 纯 Python，零系统依赖) ──────────
@@ -415,14 +419,36 @@ async def enrich_missing():
         msg = f"没有需要补全的单词" if not in_cooldown else f"{in_cooldown} 个单词正在补全中或刚尝试过，请稍后"
         return {"enriched": 0, "message": msg}
 
+    global _enrich_batch_total, _enrich_batch_done
     for w in missing:
         _enriching_ids[w["id"]] = now
         await _enrich_queue.put((w["id"], w["word"]))
+    _enrich_batch_total = len(missing)
+    _enrich_batch_done = 0
 
     return {
         "enriched": len(missing),
         "word_ids": [w["id"] for w in missing],
         "message": f"已加入 {len(missing)} 个单词到补全队列，逐个处理中",
+    }
+
+
+@app.get("/api/enrich/progress")
+def enrich_progress():
+    """返回当前 enrichment 队列进度"""
+    queue_size = _enrich_queue.qsize() if _enrich_queue else 0
+    data = load_words()
+    total_missing = sum(
+        1 for w in data["words"]
+        if not w.get("definition", "").strip()
+    )
+    return {
+        "queue_size": queue_size,
+        "current_word": _enrich_current,
+        "batch_total": _enrich_batch_total,
+        "batch_done": _enrich_batch_done,
+        "total_missing": total_missing,
+        "is_processing": _enrich_current is not None,
     }
 
 
@@ -474,8 +500,10 @@ async def create_word(body: dict):
 
 async def _enrich_worker():
     """单 worker 从队列串行取任务，逐个调用 Ollama，避免并发排队超时"""
+    global _enrich_current, _enrich_batch_done
     while True:
         word_id, word_text = await _enrich_queue.get()
+        _enrich_current = word_text
         try:
             phonetic, definition, example = await enrich_word(word_text)
             if not phonetic and not definition and not example:
@@ -495,6 +523,7 @@ async def _enrich_worker():
                         save_words(data)
                         break
 
+            _enrich_batch_done += 1
             if _event_queue is not None:
                 await _event_queue.put({
                     "type": "enriched",
@@ -504,6 +533,7 @@ async def _enrich_worker():
                     "example": example,
                 })
         finally:
+            _enrich_current = None
             _enrich_queue.task_done()
 
 

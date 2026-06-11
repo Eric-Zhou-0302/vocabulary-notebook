@@ -1,10 +1,18 @@
-import { useEffect } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 
 /**
  * 订阅后端 SSE 事件流，enriched 事件触发时回调 onEnriched(wordId, data)
+ * 连接断开时回调 onDisconnect()
  * 返回 cleanup 函数在组件卸载时断开连接
  */
-export function useSSE(onEnriched) {
+export function useSSE({ onEnriched, onDisconnect }) {
+  const onEnrichedRef = useRef(onEnriched)
+  const onDisconnectRef = useRef(onDisconnect)
+  useEffect(() => {
+    onEnrichedRef.current = onEnriched
+    onDisconnectRef.current = onDisconnect
+  })
+
   useEffect(() => {
     let aborted = false
     let reader = null
@@ -19,7 +27,10 @@ export function useSSE(onEnriched) {
 
         while (!aborted) {
           const { done, value } = await reader.read()
-          if (done) break
+          if (done) {
+            if (!aborted && onDisconnectRef.current) onDisconnectRef.current()
+            break
+          }
           buffer += decoder.decode(value, { stream: true })
 
           // 解析 SSE 帧
@@ -33,7 +44,7 @@ export function useSSE(onEnriched) {
                 try {
                   const event = JSON.parse(line.slice(6))
                   if (event.type === 'enriched') {
-                    onEnriched(event.word_id, {
+                    onEnrichedRef.current?.(event.word_id, {
                       phonetic: event.phonetic,
                       definition: event.definition,
                       example: event.example,
@@ -47,7 +58,7 @@ export function useSSE(onEnriched) {
           }
         }
       } catch {
-        // 连接失败静默处理，SSE 不是关键功能
+        if (!aborted && onDisconnectRef.current) onDisconnectRef.current()
       } finally {
         if (reader) {
           try { reader.cancel() } catch {}
@@ -63,5 +74,5 @@ export function useSSE(onEnriched) {
         try { reader.cancel() } catch {}
       }
     }
-  }, [onEnriched])
+  }, [])
 }
