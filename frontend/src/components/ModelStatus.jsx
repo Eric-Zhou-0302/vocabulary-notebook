@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export default function OllamaStatus() {
+export default function ModelStatus() {
   const [health, setHealth] = useState(null) // null = checking
 
   useEffect(() => {
@@ -17,7 +17,7 @@ export default function OllamaStatus() {
     }
 
     check()
-    const timer = setInterval(check, 30000) // 每 30s 检测一次
+    const timer = setInterval(check, 5 * 60 * 1000) // 每 5min 检测一次
     return () => {
       aborted = true
       clearInterval(timer)
@@ -32,10 +32,10 @@ export default function OllamaStatus() {
 
   return (
     <span
-      className={`ollama-status ${connected ? 'on' : 'off'}`}
+      className={`model-status ${connected ? 'on' : 'off'}`}
       title={connected ? `${providerLabel} 已连接` : `${providerLabel} 离线 — 音标和释义将无法自动补充`}
     >
-      <span className="ollama-dot" />
+      <span className="model-dot" />
       {connected ? `${providerLabel} 已连接` : `${providerLabel} 离线`}
     </span>
   )
