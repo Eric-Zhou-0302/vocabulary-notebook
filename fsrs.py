@@ -45,8 +45,12 @@ def initial_difficulty(rating: int) -> float:
 
 
 def next_difficulty(d: float, rating: int) -> float:
-    """复习后更新难度 D。Again 增加，Easy 降低。"""
-    new_d = d - W[6] * (rating - 3)
+    """复习后更新难度 D。Again 增加，Easy 降低。
+    FSRS-4.5 含 mean reversion：D 会被拉回该 rating 的初始 D（W[7] 权重）。
+    """
+    init_d = initial_difficulty(rating)
+    delta = -W[6] * (rating - 3)
+    new_d = W[7] * init_d + (1.0 - W[7]) * (d + delta)
     return min(max(new_d, 1.0), 10.0)
 
 
@@ -91,6 +95,8 @@ def next_forget_stability(d: float, s: float, r: float) -> float:
 
 def update(d: float, s: float, rating: int, elapsed_days: float) -> Tuple[float, float]:
     """复习后返回 (新 D, 新 S)。"""
+    if rating not in (1, 2, 3, 4):
+        raise ValueError(f"rating must be 1/2/3/4, got {rating}")
     new_d = next_difficulty(d, rating)
     r = retrievability(elapsed_days, s)
     if rating == 1:  # Again
