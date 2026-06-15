@@ -533,6 +533,69 @@ def review_stats():
     }
 
 
+@app.get("/api/review/due")
+def review_due(new_limit: int = Query(default=20, ge=0, le=100),
+               limit: int = Query(default=20, ge=1, le=100)):
+    """下一批 due 卡片（新词 + 复习词混合）。"""
+    _reset_daily_if_new_day()
+    data = load_words()
+    words = [w for w in data["words"] if w.get("definition", "").strip()]
+
+    now = datetime.now(CHINA_TZ)
+    new_words = [w for w in words if not w.get("srs")]
+    new_words.sort(key=lambda w: w["created_at"])  # 最老的先
+
+    review_words = []
+    for w in words:
+        srs = w.get("srs")
+        if not srs:
+            continue
+        last = datetime.fromisoformat(srs["last_review_at"])
+        interval = fsrs.next_interval(srs["s"])
+        due_at = last + timedelta(days=interval)
+        if now >= due_at:
+            w["_due_at"] = due_at
+            review_words.append(w)
+    review_words.sort(key=lambda w: w["_due_at"])  # 最过期的先
+
+    # 队列前 N 是新词（受 new_limit 约束）
+    new_due_today = max(0, DAILY_NEW_LIMIT - _daily["new_today"])
+    new_quota = min(len(new_words), new_due_today, limit)
+    new_take = new_words[:new_quota]
+    review_quota = max(0, limit - len(new_take))
+    review_take = review_words[:review_quota]
+
+    # 拼装 cards（去掉临时字段）
+    cards = []
+    for w in new_take + review_take:
+        card = {k: v for k, v in w.items() if not k.startswith("_")}
+        card["predicted_intervals"] = _predicted_intervals(w.get("srs"))
+        cards.append(card)
+
+    # 计算 review_due 总数（用于 stats）
+    review_due_total = 0
+    for w in words:
+        srs = w.get("srs")
+        if not srs:
+            continue
+        last = datetime.fromisoformat(srs["last_review_at"])
+        interval = fsrs.next_interval(srs["s"])
+        if now >= last + timedelta(days=interval):
+            review_due_total += 1
+
+    return {
+        "cards": cards,
+        "stats": {
+            "total": len(words),
+            "due_today": min(len(new_words), new_due_today) + review_due_total,
+            "new_remaining": len(new_words),
+            "review_due": review_due_total,
+            "new_today": _daily["new_today"],
+            "review_today": _daily["review_today"],
+        },
+    }
+
+
 @app.post("/api/words/enrich-missing")
 async def enrich_missing():
     """扫描缺失 definition 的单词，跳过冷却期内已完成/进行中的。"""
