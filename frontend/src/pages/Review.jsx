@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { fetchWords, fetchDates } from '../api'
 import { useSSE } from '../useSSE'
-import Flashcard from '../components/Flashcard'
+import SpacedReview from '../components/SpacedReview'
 import SpellingTest from '../components/SpellingTest'
 
 const TABS = [
   { key: 'browse', label: '浏览' },
-  { key: 'flashcard', label: '闪卡' },
+  { key: 'srs', label: '间隔复习' },
   { key: 'spelling', label: '拼写测试' },
 ]
 
@@ -18,6 +18,12 @@ export default function Review() {
   const [q, setQ] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+
+  // SRS 状态
+  const [srsCards, setSrsCards] = useState([])
+  const [srsStats, setSrsStats] = useState(null)
+  const [srsLoading, setSrsLoading] = useState(false)
+  const [toast, setToast] = useState('')
 
   useEffect(() => { fetchDates().then(d => setDates(d.dates)).catch(() => {}) }, [])
 
@@ -38,8 +44,53 @@ export default function Review() {
 
   useSSE(handleEnriched)
 
+  // SRS：拉取 due 队列
+  const fetchSrsQueue = useCallback(async () => {
+    setSrsLoading(true)
+    try {
+      const res = await fetch('/api/review/due?new_limit=20&limit=20')
+      if (res.ok) {
+        const data = await res.json()
+        setSrsCards(data.cards)
+        setSrsStats(data.stats)
+      }
+    } catch {
+      setError('复习队列加载失败')
+    } finally {
+      setSrsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (tab === 'srs') fetchSrsQueue()
+  }, [tab, fetchSrsQueue])
+
+  // 评分
+  const handleRate = useCallback(async (wordId, rating) => {
+    const res = await fetch(`/api/words/${wordId}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rating }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.detail || '评分失败')
+    }
+    return res.json()
+  }, [])
+
+  function showToast(msg) {
+    setToast(msg)
+    setTimeout(() => setToast(''), 3000)
+  }
+
+  const handleSessionEnd = useCallback(() => {
+    fetchSrsQueue()
+  }, [fetchSrsQueue])
+
   return (
     <div>
+      {toast && <div className="toast toast-info">{toast}</div>}
       <div className="tabs">
         {TABS.map(t => (
           <button
@@ -52,7 +103,15 @@ export default function Review() {
         ))}
       </div>
 
-      {tab !== 'browse' && (
+      {tab === 'srs' && srsStats && (
+        <div className="srs-header">
+          {srsStats.due_today > 0
+            ? <>今日待复习 <b>{srsStats.due_today}</b> · 全部 {srsStats.total}</>
+            : <span className="srs-done-hint">今日已完成 ✓</span>}
+        </div>
+      )}
+
+      {tab !== 'browse' && tab !== 'srs' && (
         <div className="toolbar">
           <input
             type="text" placeholder="筛选单词…" value={q}
@@ -81,8 +140,16 @@ export default function Review() {
             {w.example && <div className="example-display">"{w.example}"</div>}
           </div>
         ))
-      ) : tab === 'flashcard' ? (
-        <Flashcard words={words} />
+      ) : tab === 'srs' ? (
+        srsLoading ? (
+          <div className="loading">加载复习队列…</div>
+        ) : (
+          <SpacedReview
+            cards={srsCards}
+            onRate={handleRate}
+            onSessionEnd={handleSessionEnd}
+          />
+        )
       ) : (
         <SpellingTest words={words} />
       )}
