@@ -664,11 +664,13 @@ def post_review(word_id: str, body: dict):
         }
         save_words(data)
 
-    # 累加每日统计 — 必须在 _write_lock 外做，避免长持锁
-    if was_new:
-        _daily["new_today"] += 1
-    else:
-        _daily["review_today"] += 1
+    # 累加每日统计 — 挪进 _write_lock 内（CPython GIL 下 dict += 大体原子，
+    # 但 _reset_daily_if_new_day() 会写 _daily["date"]，跨日边界可能丢一次增量）。
+    with _write_lock:
+        if was_new:
+            _daily["new_today"] += 1
+        else:
+            _daily["review_today"] += 1
 
     interval_seconds = fsrs.next_interval(s) * 86400
     return {
