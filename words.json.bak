@@ -1,12 +1,796 @@
 {
   "words": [
     {
-      "id": "8e44d1ca8429",
-      "word": "test_word_2",
-      "definition": "n. test 2",
-      "phonetic": "",
-      "example": "",
-      "created_at": "2026-06-15T14:48:47.700630+08:00"
+      "id": "f74e10438745",
+      "word": "cork",
+      "definition": "n. 软木，软木塞，软木制品\nvt. 用软木塞塞住，抑制",
+      "phonetic": "/kɔːrk/",
+      "example": "He popped the cork off the champagne bottle.",
+      "created_at": "2026-06-15T16:17:14.161307+08:00"
+    },
+    {
+      "id": "23a3b3c103fb",
+      "word": "bark",
+      "definition": "n. 树皮，吠声\nvi. 吠叫，厉声说话\nvt. 厉声说出",
+      "phonetic": "/bɑːrk/",
+      "example": "The dog began to bark loudly when the stranger approached.",
+      "created_at": "2026-06-15T16:17:16.996096+08:00"
+    },
+    {
+      "id": "bc01ade59a4c",
+      "word": "elastic",
+      "definition": "adj. 有弹性的，灵活的\nn. 松紧带，橡皮筋",
+      "phonetic": "/ɪˈlæstɪk/",
+      "example": "The elastic in my waistband has stretched out.",
+      "created_at": "2026-06-15T16:17:29.360714+08:00"
+    },
+    {
+      "id": "07b49d8fb7e8",
+      "word": "buoyant",
+      "definition": "adj. 有浮力的，轻快的，乐观的，行情看涨的",
+      "phonetic": "/ˈbɔɪənt/",
+      "example": "The stock market has been buoyant this year.",
+      "created_at": "2026-06-15T16:17:32.477357+08:00"
+    },
+    {
+      "id": "58cc179cace3",
+      "word": "millennia",
+      "definition": "n. 千年，数千年",
+      "phonetic": "/mɪˈlɛniə/",
+      "example": "The pyramids have stood for millennia.",
+      "created_at": "2026-06-15T16:17:49.355549+08:00"
+    },
+    {
+      "id": "a5d8bddd5700",
+      "word": "conffin",
+      "definition": "n. 棺材",
+      "phonetic": "/ˈkɒn.fɪn/",
+      "example": "The old wooden conffin was carried by six pallbearers.",
+      "created_at": "2026-06-15T16:18:38.888021+08:00"
+    },
+    {
+      "id": "a306104059ad",
+      "word": "beehive",
+      "definition": "n. 蜂巢，蜂箱，拥挤的地方",
+      "phonetic": "/ˈbiː.haɪv/",
+      "example": "The garden had a wooden beehive where the bees were busy collecting nectar.",
+      "created_at": "2026-06-15T16:19:11.601436+08:00"
+    },
+    {
+      "id": "127e8311a8e7",
+      "word": "sandal",
+      "definition": "n. 凉鞋",
+      "phonetic": "/ˈsændl/",
+      "example": "She wore a pair of leather sandals to the beach.",
+      "created_at": "2026-06-15T16:19:16.143174+08:00"
+    },
+    {
+      "id": "be2a496dcab0",
+      "word": "insulate",
+      "definition": "vt. 使绝缘，使隔热，使隔音，隔离",
+      "phonetic": "/ˈɪnsəleɪt/",
+      "example": "You should insulate your home to reduce heating costs.",
+      "created_at": "2026-06-15T16:19:38.347403+08:00"
+    },
+    {
+      "id": "49058d908a9b",
+      "word": "wrap",
+      "definition": "vt. 包裹，缠绕，覆盖\nn. 包裹物，包装材料，卷饼",
+      "phonetic": "/ræp/",
+      "example": "She wrapped the gift in colorful paper.",
+      "created_at": "2026-06-15T16:19:55.056453+08:00"
+    },
+    {
+      "id": "92e38d02f6fe",
+      "word": "wrap around",
+      "definition": "vt. 把...缠绕在...上，包裹\nvi. 缠绕，环绕\nn. 环绕式物品（如裙子、眼镜）\nadj. 环绕式的，包绕的",
+      "phonetic": "/ræp əˈraʊnd/",
+      "example": "She wrapped the blanket around her shoulders.",
+      "created_at": "2026-06-15T16:19:58.052410+08:00"
+    },
+    {
+      "id": "633cf146fae5",
+      "word": "cellular",
+      "definition": "adj. 细胞的，由细胞组成的；蜂窝状的；移动通信的，蜂窝式的\nn. 移动电话，手机",
+      "phonetic": "/ˈsɛljʊlər/",
+      "example": "The cellular structure of plants is vital for their growth and function.",
+      "created_at": "2026-06-15T16:20:17.541133+08:00"
+    },
+    {
+      "id": "69b1ed398922",
+      "word": "cublic",
+      "definition": "adj. 立方体的，立方的",
+      "phonetic": "/ˈkjuːblɪk/",
+      "example": "The architect designed a cublic structure that stood out against the skyline.",
+      "created_at": "2026-06-15T16:20:22.428620+08:00"
+    },
+    {
+      "id": "1a2c9a932248",
+      "word": "centimetre",
+      "definition": "n. 厘米，公分",
+      "phonetic": "/ˈsɛntɪmiːtə/",
+      "example": "The ruler is marked in centimetres.",
+      "created_at": "2026-06-15T16:20:28.748085+08:00"
+    },
+    {
+      "id": "137aabc7c970",
+      "word": "cell",
+      "definition": "n. 细胞，牢房，小隔间，电池（单元），手机（口语）",
+      "phonetic": "/sɛl/",
+      "example": "Cancer cells can spread to other parts of the body.",
+      "created_at": "2026-06-15T16:20:37.759710+08:00"
+    },
+    {
+      "id": "a746dfe41fa6",
+      "word": "squash",
+      "definition": "n. 南瓜属植物（西葫芦等），壁球运动\nvt. 压扁，挤压，镇压，制止\nvi. 挤入，挤进，被压扁",
+      "phonetic": "/skwɒʃ/",
+      "example": "She squashed the empty can with her foot.",
+      "created_at": "2026-06-15T16:21:39.308584+08:00"
+    },
+    {
+      "id": "547dfe9eeacb",
+      "word": "spring back",
+      "definition": "vi. 弹回，反弹，恢复原状",
+      "phonetic": "/sprɪŋ bæk/",
+      "example": "The rubber band springs back when released.",
+      "created_at": "2026-06-15T16:25:52.136869+08:00"
+    },
+    {
+      "id": "9c22ea2457ed",
+      "word": "strip",
+      "definition": "vt. 剥去，剥光，脱去（衣服）\nvi. 脱衣服，剥落\nn. 条，带，带状物，简易机场，商业街",
+      "phonetic": "/strɪp/",
+      "example": "He stripped off his wet clothes and jumped into the shower.",
+      "created_at": "2026-06-15T17:00:00.002594+08:00"
+    },
+    {
+      "id": "ce40b1643e25",
+      "word": "flourish",
+      "definition": "vi. 繁荣，茂盛，兴旺\nvt. 挥舞，炫耀\nn. 挥舞，炫耀动作，花体字，华丽辞藻",
+      "phonetic": "/ˈflɜːrɪʃ/",
+      "example": "She signed her name with a flourish.",
+      "created_at": "2026-06-15T17:00:26.940214+08:00"
+    },
+    {
+      "id": "b729abfa743f",
+      "word": "thrive",
+      "definition": "vi. 繁荣，茁壮成长，兴旺发达",
+      "phonetic": "/θraɪv/",
+      "example": "Plants thrive in sunlight with adequate water and nutrients.",
+      "created_at": "2026-06-15T17:00:29.275464+08:00"
+    },
+    {
+      "id": "98ec31ee1fee",
+      "word": "soil",
+      "definition": "n. 土壤，土地，泥土，污物\nvt. 弄脏，污损，玷污\nvi. 变脏",
+      "phonetic": "/sɔɪl/",
+      "example": "The soil in this garden is rich and fertile.",
+      "created_at": "2026-06-15T17:00:44.919967+08:00"
+    },
+    {
+      "id": "358031d6f5c4",
+      "word": "sapling",
+      "definition": "n. 树苗，幼树",
+      "phonetic": "/ˈsæplɪŋ/",
+      "example": "The gardener planted a sapling in the backyard.",
+      "created_at": "2026-06-15T17:00:55.350467+08:00"
+    },
+    {
+      "id": "7dd78aa3de17",
+      "word": "indeed",
+      "definition": "adv. 确实，的确，真正地",
+      "phonetic": "/ɪnˈdiːd/",
+      "example": "He is indeed a very talented musician.",
+      "created_at": "2026-06-15T17:00:58.002726+08:00"
+    },
+    {
+      "id": "913c5198d296",
+      "word": "moisture",
+      "definition": "n. 湿气，水分，潮气",
+      "phonetic": "/ˈmɔɪstʃər/",
+      "example": "The moisture in the air made the room feel humid.",
+      "created_at": "2026-06-15T17:01:01.497040+08:00"
+    },
+    {
+      "id": "219a171e4d72",
+      "word": "family-owned",
+      "definition": "adj. 家族拥有的，家庭经营的",
+      "phonetic": "/ˈfæməli oʊnd/",
+      "example": "The company is a family-owned business that has been passed down for generations.",
+      "created_at": "2026-06-15T17:01:07.481943+08:00"
+    },
+    {
+      "id": "d446537ce7b9",
+      "word": "prise",
+      "definition": "vt. 撬开，撬动\nn. 杠杆，撬杠",
+      "phonetic": "/praɪz/",
+      "example": "He used a crowbar to prise the lid off the crate.",
+      "created_at": "2026-06-15T17:01:14.146064+08:00"
+    },
+    {
+      "id": "a4409363926a",
+      "word": "husk",
+      "definition": "n. 外壳，外皮，荚\nvt. 剥去…的外壳，除去…的皮",
+      "phonetic": "/hʌsk/",
+      "example": "She removed the husk from the corn before boiling it.",
+      "created_at": "2026-06-15T17:01:19.185960+08:00"
+    },
+    {
+      "id": "2f6d3f7a9e7f",
+      "word": "bottle stoppers",
+      "definition": "n. 瓶塞",
+      "phonetic": "/ˈbɒt.əl ˈstɒp.əz/",
+      "example": "I need to buy some bottle stoppers for my wine bottles.",
+      "created_at": "2026-06-15T17:01:49.456335+08:00"
+    },
+    {
+      "id": "339d69ef9a83",
+      "word": "remainder",
+      "definition": "n. 剩余部分，余数\nvt. 廉价出售（滞销书）",
+      "phonetic": "/rɪˈmeɪndər/",
+      "example": "The remainder of the cake was shared among the children.",
+      "created_at": "2026-06-15T17:01:52.879974+08:00"
+    },
+    {
+      "id": "2b85c42cab78",
+      "word": "tile",
+      "definition": "n. 瓷砖，瓦片\nvt. 铺瓦，铺瓷砖",
+      "phonetic": "/taɪl/",
+      "example": "He decided to tile the bathroom floor.",
+      "created_at": "2026-06-15T17:01:55.286867+08:00"
+    },
+    {
+      "id": "fc3d5dcfb3a2",
+      "word": "thermal",
+      "definition": "adj. 热的，热量的，保暖的\nn. 上升热气流，保暖内衣",
+      "phonetic": "/ˈθɜːrməl/",
+      "example": "The eagle soared on a thermal.",
+      "created_at": "2026-06-15T17:01:58.140441+08:00"
+    },
+    {
+      "id": "6d5b60c61507",
+      "word": "acoustic",
+      "definition": "adj. 声学的，听觉的，音响的\nn. 声学，音响效果",
+      "phonetic": "/əˈkuːstɪk/",
+      "example": "The acoustic guitar has a warm, natural sound.",
+      "created_at": "2026-06-15T17:02:00.356797+08:00"
+    },
+    {
+      "id": "dc261034ccb4",
+      "word": "granules",
+      "definition": "n. 颗粒，微粒，细粒",
+      "phonetic": "/ˈɡrænjuːlz/",
+      "example": "The sugar granules dissolved quickly in the hot coffee.",
+      "created_at": "2026-06-15T17:02:03.116567+08:00"
+    },
+    {
+      "id": "2c41820949b8",
+      "word": "monopoly",
+      "definition": "n. 垄断，独占，垄断企业，垄断权，大富翁（游戏）",
+      "phonetic": "/məˈnɒpəli/",
+      "example": "The company has a near monopoly on the sale of certain drugs.",
+      "created_at": "2026-06-15T17:02:21.017719+08:00"
+    },
+    {
+      "id": "26b76076630f",
+      "word": "aluminium",
+      "definition": "n. 铝",
+      "phonetic": "/ˌæl.jəˈmɪn.i.əm/",
+      "example": "Aluminium is widely used in the aerospace industry due to its light weight and strength.",
+      "created_at": "2026-06-15T17:02:32.685338+08:00"
+    },
+    {
+      "id": "b169dda75c74",
+      "word": "screw",
+      "definition": "n. 螺丝钉，螺钉，螺旋\nvt. 拧紧，旋；欺骗，搞糟\nvi. 拧，旋",
+      "phonetic": "/skruː/",
+      "example": "Please screw the lid on tightly.",
+      "created_at": "2026-06-15T17:02:34.242192+08:00"
+    },
+    {
+      "id": "7c1db09089c8",
+      "word": "cap",
+      "definition": "n. 帽子，盖子，上限\nvt. 给…戴帽，覆盖，限制",
+      "phonetic": "/kæp/",
+      "example": "She wore a red cap to the baseball game.",
+      "created_at": "2026-06-15T17:02:35.367400+08:00"
+    },
+    {
+      "id": "736fe3f4183e",
+      "word": "in keeping with",
+      "definition": "prep. 与...一致，符合，按照",
+      "phonetic": "/ɪn ˈkiːpɪŋ wɪð/",
+      "example": "In keeping with tradition, they held a ceremony.",
+      "created_at": "2026-06-15T17:02:42.345428+08:00"
+    },
+    {
+      "id": "ee66fd79d440",
+      "word": "desertification",
+      "definition": "n. 荒漠化，沙漠化",
+      "phonetic": "/dɪˌzɜːrtɪfɪˈkeɪʃən/",
+      "example": "Desertification is a serious environmental problem affecting many arid and semi-arid regions.",
+      "created_at": "2026-06-15T17:02:50.794698+08:00"
+    },
+    {
+      "id": "8770b023af30",
+      "word": "archtophilist",
+      "definition": "n. 泰迪熊收藏家，爱熊者",
+      "phonetic": "/ɑːrkˈtɒfɪlɪst/",
+      "example": "As an archtophilist, she has over a hundred teddy bears from different eras.",
+      "created_at": "2026-06-15T18:44:22.190144+08:00"
+    },
+    {
+      "id": "dcca2ad1d621",
+      "word": "philatelist",
+      "definition": "n. 集邮者，邮票收藏家",
+      "phonetic": "/fɪˈlætəlɪst/",
+      "example": "A philatelist spends hours organizing stamp collections.",
+      "created_at": "2026-06-15T18:44:25.816269+08:00"
+    },
+    {
+      "id": "3cb4fb2915d1",
+      "word": "deltiologist",
+      "definition": "n. 明信片收藏家，明信片搜集者",
+      "phonetic": "/ˌdɛltiˈɑːlədʒɪst/",
+      "example": "The deltiologist spent hours sorting her collection by country and era.",
+      "created_at": "2026-06-15T18:44:30.165621+08:00"
+    },
+    {
+      "id": "ed0dbca1bbda",
+      "word": "amassing",
+      "definition": "vt. 积累，积聚，收集",
+      "phonetic": "/əˈmæsɪŋ/",
+      "example": "He is amassing a huge collection of vintage cars.",
+      "created_at": "2026-06-15T18:44:35.523840+08:00"
+    },
+    {
+      "id": "9e183f1aac62",
+      "word": "instrumental",
+      "definition": "adj. 有帮助的，起作用的，乐器的\nn. 器乐曲",
+      "phonetic": "/ˌɪnstrəˈmɛntəl/",
+      "example": "Her support was instrumental in the success of the project.",
+      "created_at": "2026-06-15T18:44:47.029452+08:00"
+    },
+    {
+      "id": "c68817656fac",
+      "word": "triumph",
+      "definition": "n. 胜利，成功，凯旋\nvi. 获胜，成功，战胜",
+      "phonetic": "/ˈtraɪəmf/",
+      "example": "She celebrated her triumph in the competition with joy.",
+      "created_at": "2026-06-15T18:44:53.510062+08:00"
+    },
+    {
+      "id": "06f90b0d95e4",
+      "word": "like-minded",
+      "definition": "adj. 志趣相投的，想法相似的，意气相投的",
+      "phonetic": "/ˈlaɪkˌmaɪndɪd/",
+      "example": "They are a group of like-minded individuals who share a passion for environmental conservation.",
+      "created_at": "2026-06-15T18:44:59.073335+08:00"
+    },
+    {
+      "id": "a3b67321ffe2",
+      "word": "variant",
+      "definition": "n. 变体，变种，变异形式\nadj. 不同的，变异的，变体的",
+      "phonetic": "/ˈvɛriənt/",
+      "example": "This variant of the virus is more contagious.",
+      "created_at": "2026-06-15T18:45:03.376417+08:00"
+    },
+    {
+      "id": "4d0d02cab734",
+      "word": "in a hunt for",
+      "definition": "prep. 在寻找...的过程中，为了寻找...",
+      "phonetic": "/ɪn ə hʌnt fɔː/",
+      "example": "The police are in a hunt for the missing child.",
+      "created_at": "2026-06-15T18:45:14.164341+08:00"
+    },
+    {
+      "id": "f170e06c4021",
+      "word": "amass",
+      "definition": "vt. 积累，积聚，收集",
+      "phonetic": "/əˈmæs/",
+      "example": "He amassed a huge collection of stamps.",
+      "created_at": "2026-06-15T18:46:42.604963+08:00"
+    },
+    {
+      "id": "feaf09b77028",
+      "word": "fossil",
+      "definition": "n. 化石，老古董\nadj. 化石的，陈旧的，过时的",
+      "phonetic": "/ˈfɒs.əl/",
+      "example": "The fossil was perfectly preserved in the rock.",
+      "created_at": "2026-06-15T18:46:44.496977+08:00"
+    },
+    {
+      "id": "9d216bddd9e9",
+      "word": "extent",
+      "definition": "n. 程度，范围，限度",
+      "phonetic": "/ɪkˈstɛnt/",
+      "example": "To some extent, the decision was based on financial considerations.",
+      "created_at": "2026-06-15T18:46:47.177042+08:00"
+    },
+    {
+      "id": "e87da5db9de7",
+      "word": "locomotive",
+      "definition": "n. 机车，火车头\nadj. 移动的，运动的，有运动力的",
+      "phonetic": "/ˌloʊkəˈmoʊtɪv/",
+      "example": "The locomotive pulled a long line of freight cars.",
+      "created_at": "2026-06-15T18:46:53.373478+08:00"
+    },
+    {
+      "id": "d022dc908dfd",
+      "word": "tick off",
+      "definition": "vt. 用记号勾出，标记；使生气，激怒；责骂，斥责",
+      "phonetic": "/tɪk ɒf/",
+      "example": "The teacher ticked off the student for being late.",
+      "created_at": "2026-06-15T18:46:57.421995+08:00"
+    },
+    {
+      "id": "94f85b93f7a9",
+      "word": "practitioner",
+      "definition": "n. 从业者，执业者，实践者",
+      "phonetic": "/prækˈtɪʃənər/",
+      "example": "She has been a legal practitioner for over twenty years.",
+      "created_at": "2026-06-15T18:47:03.230645+08:00"
+    },
+    {
+      "id": "c33c7642fe66",
+      "word": "go beyond",
+      "definition": "vt. 超越，超过，胜过",
+      "phonetic": "/ɡoʊ bɪˈjɑːnd/",
+      "example": "Her performance went beyond all expectations.",
+      "created_at": "2026-06-15T18:47:10.291090+08:00"
+    },
+    {
+      "id": "d930744a362b",
+      "word": "wax",
+      "definition": "n. 蜡，耳垢\nvt. 给...上蜡，涂蜡\nvi. 增大，渐圆，变得",
+      "phonetic": "/wæks/",
+      "example": "The moon waxes and wanes each month.",
+      "created_at": "2026-06-15T18:47:17.914918+08:00"
+    },
+    {
+      "id": "a638c578d5e6",
+      "word": "porcelain",
+      "definition": "n. 瓷器，瓷\nadj. 瓷制的，瓷的",
+      "phonetic": "/ˈpɔːrsəlɪn/",
+      "example": "She collects antique porcelain vases.",
+      "created_at": "2026-06-15T18:47:20.507163+08:00"
+    },
+    {
+      "id": "f7e558264cdc",
+      "word": "ought to",
+      "definition": "vi. 应该，应当，理应",
+      "phonetic": "/ɔːt tuː/",
+      "example": "You ought to apologize to her.",
+      "created_at": "2026-06-15T18:47:23.356295+08:00"
+    },
+    {
+      "id": "efb1441599d3",
+      "word": "album",
+      "definition": "n. 相册，影集，集邮册，唱片集，专辑，作品集",
+      "phonetic": "/ˈælbəm/",
+      "example": "I bought a new album by my favorite band.",
+      "created_at": "2026-06-15T18:47:29.030734+08:00"
+    },
+    {
+      "id": "e6d36ff857c2",
+      "word": "commonplace",
+      "definition": "adj. 平凡的，普通的，司空见惯的\nn. 寻常的事物，平庸的东西",
+      "phonetic": "/ˈkɒm.ən.pleɪs/",
+      "example": "It's a commonplace idea that exercise is good for health.",
+      "created_at": "2026-06-15T18:47:32.597162+08:00"
+    },
+    {
+      "id": "5d1fd43f8af0",
+      "word": "depict",
+      "definition": "vt. 描绘，描述，刻画",
+      "phonetic": "/dɪˈpɪkt/",
+      "example": "The painting depicts a beautiful landscape.",
+      "created_at": "2026-06-15T18:47:34.185199+08:00"
+    },
+    {
+      "id": "5679de7e8f55",
+      "word": "alphabetical",
+      "definition": "adj. 按字母顺序的，字母表的",
+      "phonetic": "/ˌæl.fəˈbet.ɪ.kəl/",
+      "example": "The words are listed in alphabetical order.",
+      "created_at": "2026-06-15T18:47:38.927029+08:00"
+    },
+    {
+      "id": "943b6538dfd4",
+      "word": "convey",
+      "definition": "vt. 运输，传送，表达，传达，转让（财产等）",
+      "phonetic": "/kənˈveɪ/",
+      "example": "She tried to convey her feelings through music.",
+      "created_at": "2026-06-15T18:47:51.654594+08:00"
+    },
+    {
+      "id": "627e43993115",
+      "word": "in existence",
+      "definition": "adj. 存在的，现存的",
+      "phonetic": "/ɪn ɪɡˈzɪstəns/",
+      "example": "This is the only known copy of the book still in existence.",
+      "created_at": "2026-06-15T18:47:57.246346+08:00"
+    },
+    {
+      "id": "6843d3e4cfeb",
+      "word": "mild",
+      "definition": "adj. 温和的，温柔的，轻微的，不强烈的，不辣的\nn. 淡啤酒",
+      "phonetic": "/maɪld/",
+      "example": "The weather is mild today.",
+      "created_at": "2026-06-15T18:48:01.321194+08:00"
+    },
+    {
+      "id": "dae68a7f1a4b",
+      "word": "engrossing",
+      "definition": "adj. 引人入胜的，非常有趣的，吸引人的",
+      "phonetic": "/ɪnˈɡroʊsɪŋ/",
+      "example": "The novel was so engrossing that I read it in one sitting.",
+      "created_at": "2026-06-15T18:48:04.607421+08:00"
+    },
+    {
+      "id": "04b1ac03f867",
+      "word": "eccentric",
+      "definition": "adj. 古怪的，反常的，异乎寻常的\nn. 古怪的人，行为古怪的人",
+      "phonetic": "/ɪkˈsentrɪk/",
+      "example": "She has some eccentric habits, like collecting old typewriters.",
+      "created_at": "2026-06-15T18:48:08.987491+08:00"
+    },
+    {
+      "id": "39c21ebbca74",
+      "word": "motto",
+      "definition": "n. 格言，座右铭，箴言",
+      "phonetic": "/ˈmɒtəʊ/",
+      "example": "The company's motto is 'Quality first'.",
+      "created_at": "2026-06-15T19:37:31.306592+08:00"
+    },
+    {
+      "id": "ac275c776afe",
+      "word": "apt",
+      "definition": "adj. 恰当的，合适的；易于…的，有…倾向的；聪明的，反应快的",
+      "phonetic": "/æpt/",
+      "example": "She is apt at learning new languages.",
+      "created_at": "2026-06-15T19:37:33.034050+08:00"
+    },
+    {
+      "id": "aa334e900a7d",
+      "word": "characterization",
+      "definition": "n. 描述，刻画，特征描述",
+      "phonetic": "/ˌkærəktəraɪˈzeɪʃən/",
+      "example": "The author's characterization of the main character is both detailed and compelling.",
+      "created_at": "2026-06-15T19:37:37.187525+08:00"
+    },
+    {
+      "id": "66f06420ed0b",
+      "word": "resort",
+      "definition": "n. 度假胜地，旅游胜地；手段，凭借\nvi. 诉诸，采取（后接to）",
+      "phonetic": "/rɪˈzɔːrt/",
+      "example": "If the negotiation fails, we will have to resort to legal action.",
+      "created_at": "2026-06-15T19:37:40.104451+08:00"
+    },
+    {
+      "id": "aa6455477794",
+      "word": "interior",
+      "definition": "n. 内部，内陆，内政\nadj. 内部的，内地的，心灵的",
+      "phonetic": "/ɪnˈtɪriər/",
+      "example": "The interior of the house was beautifully decorated.",
+      "created_at": "2026-06-15T19:37:42.561869+08:00"
+    },
+    {
+      "id": "dc45ea907006",
+      "word": "arson",
+      "definition": "n. 纵火（罪），放火（罪）",
+      "phonetic": "/ˈɑːr.sən/",
+      "example": "He was charged with arson.",
+      "created_at": "2026-06-15T19:37:44.917023+08:00"
+    },
+    {
+      "id": "f9a99851df15",
+      "word": "prospective",
+      "definition": "adj. 未来的，潜在的，可能的",
+      "phonetic": "/prəˈspɛktɪv/",
+      "example": "The prospective buyer asked many questions about the property.",
+      "created_at": "2026-06-15T19:37:49.127625+08:00"
+    },
+    {
+      "id": "abc94851f5d7",
+      "word": "trick",
+      "definition": "n. 诡计，骗局，恶作剧，技巧，窍门\nvt. 欺骗，戏弄\nadj. 特技的，骗人的",
+      "phonetic": "/trɪk/",
+      "example": "He played a clever trick on his friend by hiding his keys.",
+      "created_at": "2026-06-15T19:37:50.957859+08:00"
+    },
+    {
+      "id": "c58e6413df2e",
+      "word": "deliberate",
+      "definition": "adj. 故意的，蓄意的；从容的，审慎的\nvi. 仔细考虑，深思熟虑",
+      "phonetic": "/dɪˈlɪbəreɪt/",
+      "example": "She deliberated for hours before making a decision.",
+      "created_at": "2026-06-15T19:37:54.753369+08:00"
+    },
+    {
+      "id": "72dea9347691",
+      "word": "arsonist",
+      "definition": "n. 纵火犯，放火者",
+      "phonetic": "/ˈɑːrsənɪst/",
+      "example": "The arsonist was caught setting fire to the warehouse.",
+      "created_at": "2026-06-15T19:38:02.796526+08:00"
+    },
+    {
+      "id": "7f8d79015d8b",
+      "word": "criticize",
+      "definition": "vt. 批评，指责，批判\nvi. 批评",
+      "phonetic": "/ˈkrɪtɪsaɪz/",
+      "example": "She criticized his decision harshly.",
+      "created_at": "2026-06-15T19:38:06.197597+08:00"
+    },
+    {
+      "id": "f59fcc24573b",
+      "word": "torch",
+      "definition": "n. 火炬，火把；手电筒\nvt. 纵火烧，放火",
+      "phonetic": "/tɔːrtʃ/",
+      "example": "He used a torch to find his way in the dark.",
+      "created_at": "2026-06-15T19:38:09.959192+08:00"
+    },
+    {
+      "id": "4dcbb9fccae5",
+      "word": "dishonest",
+      "definition": "adj. 不诚实的，欺诈的，虚伪的",
+      "phonetic": "/dɪsˈɒnɪst/",
+      "example": "It is dishonest to lie about your qualifications on a job application.",
+      "created_at": "2026-06-15T19:38:12.226401+08:00"
+    },
+    {
+      "id": "af37694c1955",
+      "word": "creep into",
+      "definition": "vt. 潜入，悄悄进入；逐渐产生（某种感觉等）",
+      "phonetic": "/kriːp ˈɪntuː/",
+      "example": "A feeling of doubt crept into his mind.",
+      "created_at": "2026-06-15T19:38:17.318748+08:00"
+    },
+    {
+      "id": "ff902dc2761c",
+      "word": "anew",
+      "definition": "adv. 重新，再，另",
+      "phonetic": "/əˈnjuː/",
+      "example": "She decided to start her life anew after the divorce.",
+      "created_at": "2026-06-15T19:38:25.012692+08:00"
+    },
+    {
+      "id": "e663ed9212c0",
+      "word": "ethical",
+      "definition": "adj. 道德的，伦理的，合乎道德的",
+      "phonetic": "/ˈɛθɪkəl/",
+      "example": "It is not ethical to lie to your clients.",
+      "created_at": "2026-06-15T19:38:28.743376+08:00"
+    },
+    {
+      "id": "3a037a4525c5",
+      "word": "codify",
+      "definition": "vt. 编纂，整理，将…编成法典",
+      "phonetic": "/ˈkəʊdɪfaɪ/",
+      "example": "The government aims to codify the existing laws.",
+      "created_at": "2026-06-15T19:38:37.777706+08:00"
+    },
+    {
+      "id": "c6a26e2ada1c",
+      "word": "downright",
+      "definition": "adv. 彻底地，完全地\nadj. 完全的，彻头彻尾的",
+      "phonetic": "/ˈdaʊnˌraɪt/",
+      "example": "That is downright ridiculous.",
+      "created_at": "2026-06-15T19:38:41.762975+08:00"
+    },
+    {
+      "id": "04ff5c0bb111",
+      "word": "in light of",
+      "definition": "prep. 考虑到，鉴于，根据",
+      "phonetic": "/ɪn laɪt əv/",
+      "example": "In light of the recent events, we have decided to postpone the meeting.",
+      "created_at": "2026-06-15T19:38:46.902176+08:00"
+    },
+    {
+      "id": "acc96c041ad4",
+      "word": "acquisition",
+      "definition": "n. 获得，取得，获取，收购，习得",
+      "phonetic": "/ˌækwɪˈzɪʃən/",
+      "example": "The company's acquisition of the startup was completed last month.",
+      "created_at": "2026-06-15T19:38:57.979617+08:00"
+    },
+    {
+      "id": "6b87aa39aa14",
+      "word": "capture",
+      "definition": "vt. 捕获，俘获；夺取，占领；记录，拍摄；吸引（注意力）\nn. 捕获，俘获；夺取，占领；捕获物",
+      "phonetic": "/ˈkæptʃər/",
+      "example": "The photographer managed to capture the perfect sunset.",
+      "created_at": "2026-06-15T19:39:03.232360+08:00"
+    },
+    {
+      "id": "51fb6d4be2bd",
+      "word": "scrutiny",
+      "definition": "n. 仔细审查，严密监督，详细检查",
+      "phonetic": "/ˈskruːtəni/",
+      "example": "The company's financial records came under close scrutiny.",
+      "created_at": "2026-06-15T19:39:06.213612+08:00"
+    },
+    {
+      "id": "28deb86d5715",
+      "word": "supremely relevant",
+      "definition": "adj. 极其相关的，非常切题的，高度相关的",
+      "phonetic": "/suːˈpriːmli ˈrɛləvənt/",
+      "example": "Her research is supremely relevant to the current debate.",
+      "created_at": "2026-06-15T19:39:14.297708+08:00"
+    },
+    {
+      "id": "28fdb0498548",
+      "word": "prosecute",
+      "definition": "vt. 起诉，控告",
+      "phonetic": "/ˈprɒsɪkjuːt/",
+      "example": "The district attorney decided to prosecute the suspect.",
+      "created_at": "2026-06-15T19:39:21.201691+08:00"
+    },
+    {
+      "id": "7bb7386b0402",
+      "word": "articulate",
+      "definition": "adj. 善于表达的，口齿清晰的\nvt. 明确表达，清晰地发音\nvi. 清晰地发音，连接",
+      "phonetic": "/ɑːˈtɪkjʊleɪt/ (v.), /ɑːˈtɪkjələt/ (adj.)",
+      "example": "She articulated her thoughts clearly during the meeting.",
+      "created_at": "2026-06-15T19:39:24.392209+08:00"
+    },
+    {
+      "id": "6f3e5a1fb67a",
+      "word": "generalize",
+      "definition": "vt. 概括，归纳；推广，普及\nvi. 概括，归纳，形成概念",
+      "phonetic": "/ˈdʒɛnərəlaɪz/",
+      "example": "It is dangerous to generalize from a single example.",
+      "created_at": "2026-06-15T19:39:28.247712+08:00"
+    },
+    {
+      "id": "802ba71aeafe",
+      "word": "welfare",
+      "definition": "n. 福利，幸福，安康，救济金，福利制度",
+      "phonetic": "/ˈwɛlˌfɛər/",
+      "example": "The government provides welfare benefits to those in need.",
+      "created_at": "2026-06-15T19:39:41.797064+08:00"
+    },
+    {
+      "id": "dbc3bbdd214a",
+      "word": "noble",
+      "definition": "adj. 高尚的，崇高的，贵族的\nn. 贵族",
+      "phonetic": "/ˈnoʊbəl/",
+      "example": "The knight was known for his noble deeds and unwavering loyalty.",
+      "created_at": "2026-06-15T19:39:43.577656+08:00"
+    },
+    {
+      "id": "4afca76afe19",
+      "word": "reckless",
+      "definition": "adj. 鲁莽的，不顾危险的，轻率的",
+      "phonetic": "/ˈrɛkləs/",
+      "example": "It was reckless of him to drive so fast in the rain.",
+      "created_at": "2026-06-15T19:39:45.499400+08:00"
+    },
+    {
+      "id": "ec4c93cd6d45",
+      "word": "fraud",
+      "definition": "n. 欺诈，诈骗，骗局，骗子",
+      "phonetic": "/frɔːd/",
+      "example": "The company was accused of committing fraud.",
+      "created_at": "2026-06-15T19:39:48.846554+08:00"
+    },
+    {
+      "id": "ddea257d5356",
+      "word": "divergent",
+      "definition": "adj. 分叉的，偏离的，有分歧的，不同的，发散的\nn. 分歧者",
+      "phonetic": "/daɪˈvɜːrdʒənt/",
+      "example": "Their political views are divergent from each other.",
+      "created_at": "2026-06-15T19:39:51.673330+08:00"
+    },
+    {
+      "id": "012f001b8261",
+      "word": "identical",
+      "definition": "adj. 相同的，一模一样的，完全相同的",
+      "phonetic": "/aɪˈdɛntɪkəl/",
+      "example": "The two signatures are nearly identical.",
+      "created_at": "2026-06-15T19:39:54.738435+08:00"
     }
   ]
 }
