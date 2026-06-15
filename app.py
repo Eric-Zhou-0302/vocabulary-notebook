@@ -257,9 +257,17 @@ def list_words(
     date: str = Query(default=""),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=10000),
+    sort: str = Query(default=""),
+    letter: str = Query(default=""),
 ):
     data = load_words()
-    words = _filter_words(data, q, date)
+    # 先按 q+date+sort 过滤一次，用于计算 available_letters（不含 letter 自身的影响）
+    pre_letter = _filter_words(data, q, date, sort)
+    available_letters = sorted({
+        w["word"][0].lower() for w in pre_letter if w.get("word")
+    })
+
+    words = _filter_words(data, q, date, sort, letter)
 
     total = len(words)
     start = (page - 1) * size
@@ -271,6 +279,7 @@ def list_words(
         "page": page,
         "size": size,
         "pages": max((total + size - 1) // size, 1),
+        "available_letters": available_letters,
     }
 
 
@@ -292,9 +301,10 @@ def export_words(
     format: str = Query(default="json"),
     q: str = Query(default=""),
     date: str = Query(default=""),
+    sort: str = Query(default=""),
 ):
     data = load_words()
-    words = _filter_words(data, q, date)
+    words = _filter_words(data, q, date, sort)
     today = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
 
     if format == "csv":
@@ -411,6 +421,37 @@ def export_words(
     )
 
 
+async def _enqueue_enrich_batch(items: list) -> None:
+    """送入 enrich 队列并累加 batch 计数器。
+
+    仅做"入队 + 累加"，不做重置。重置由调用方在合适的时机显式调用
+    `_maybe_reset_batch_if_idle()`，这样 enrich-missing 即使在 0 missing 提前
+    return 的路径上也能把上一批残留状态清掉。
+
+    调用方必须在同一协程内连续调用（不要跨 await），这样检查 + 入队 + 计数的
+    同步段不会被 worker 协程打断，竞态安全。
+    """
+    global _enrich_batch_total
+    if not items:
+        return
+    now = asyncio.get_event_loop().time()
+    for word_id, word_text in items:
+        _enriching_ids[word_id] = now
+        await _enrich_queue.put((word_id, word_text))
+    _enrich_batch_total += len(items)
+
+
+def _maybe_reset_batch_if_idle() -> None:
+    """若 worker 空闲 + 队列空 + 上一批已结束，重置 batch 计数器。
+
+    同步函数：调用方必须在 _enrich_queue.put 之前同一同步段内执行，竞态安全。
+    """
+    global _enrich_batch_total, _enrich_batch_done
+    if not _enrich_current and _enrich_queue.qsize() == 0 and _enrich_batch_total > 0:
+        _enrich_batch_total = 0
+        _enrich_batch_done = 0
+
+
 # ─── SRS 辅助 ─────────────────────────────────────────
 
 def _today_iso() -> str:
@@ -466,6 +507,9 @@ def _predicted_intervals(srs: Optional[dict]) -> dict:
 @app.post("/api/words/enrich-missing")
 async def enrich_missing():
     """扫描缺失 definition 的单词，跳过冷却期内已完成/进行中的。"""
+    # 入口处先尝试重置上一批残留状态 — 即使下面 0 missing 提前 return，
+    # 也能让 batch_total/batch_done 清零，避免污染后续观察。
+    _maybe_reset_batch_if_idle()
     now = asyncio.get_event_loop().time()
     data = load_words()
     missing = [
@@ -482,12 +526,7 @@ async def enrich_missing():
         msg = f"没有需要补全的单词" if not in_cooldown else f"{in_cooldown} 个单词正在补全中或刚尝试过，请稍后"
         return {"enriched": 0, "message": msg}
 
-    global _enrich_batch_total, _enrich_batch_done
-    for w in missing:
-        _enriching_ids[w["id"]] = now
-        await _enrich_queue.put((w["id"], w["word"]))
-    _enrich_batch_total = len(missing)
-    _enrich_batch_done = 0
+    await _enqueue_enrich_batch([(w["id"], w["word"]) for w in missing])
 
     return {
         "enriched": len(missing),
@@ -554,9 +593,8 @@ async def create_word(body: dict):
     data["words"].append(word_obj)
     save_words(data)
 
-    # 送入补全队列，后台串行处理
-    _enriching_ids[word_id] = asyncio.get_event_loop().time()
-    await _enrich_queue.put((word_id, word_text))
+    # 送入补全队列，后台串行处理（持续累加，不重置 — 用户显式补全缺失才是新一批）
+    await _enqueue_enrich_batch([(word_id, word_text)])
 
     return {"word": word_obj}
 
@@ -627,13 +665,20 @@ def delete_word(word_id: str):
 
 # ─── 导出辅助函数 ─────────────────────────────────────────
 
-def _filter_words(data: dict, q: str, date: str) -> list:
+def _filter_words(data: dict, q: str, date: str, sort: str = "", letter: str = "") -> list:
     words = data["words"]
     if date:
         words = [w for w in words if w["created_at"].startswith(date)]
     if q:
         ql = q.lower()
         words = [w for w in words if ql in w["word"].lower() or ql in w["definition"].lower()]
+    if letter:
+        l = letter.lower()
+        words = [w for w in words if w["word"].lower().startswith(l)]
+    if sort == "alpha_asc":
+        words = sorted(words, key=lambda w: w["word"].lower())
+    elif sort == "alpha_desc":
+        words = sorted(words, key=lambda w: w["word"].lower(), reverse=True)
     return words
 
 
