@@ -542,54 +542,43 @@ def review_due(new_limit: int = Query(default=20, ge=0, le=100),
     words = [w for w in data["words"] if w.get("definition", "").strip()]
 
     now = datetime.now(CHINA_TZ)
-    new_words = [w for w in words if not w.get("srs")]
-    new_words.sort(key=lambda w: w["created_at"])  # 最老的先
+    new_words = sorted(
+        [w for w in words if not w.get("srs")],
+        key=lambda w: w["created_at"],
+    )
 
+    # review_words 是 (word, due_at) 元组列表，避开给 word dict 写临时字段
     review_words = []
     for w in words:
         srs = w.get("srs")
         if not srs:
             continue
         last = datetime.fromisoformat(srs["last_review_at"])
-        interval = fsrs.next_interval(srs["s"])
-        due_at = last + timedelta(days=interval)
+        due_at = last + timedelta(days=fsrs.next_interval(srs["s"]))
         if now >= due_at:
-            w["_due_at"] = due_at
-            review_words.append(w)
-    review_words.sort(key=lambda w: w["_due_at"])  # 最过期的先
+            review_words.append((w, due_at))
+    review_words.sort(key=lambda t: t[1])  # 最过期的先
 
-    # 队列前 N 是新词（受 new_limit 约束）
+    # 队列前 N 是新词（受每日上限约束）
     new_due_today = max(0, DAILY_NEW_LIMIT - _daily["new_today"])
     new_quota = min(len(new_words), new_due_today, limit)
-    new_take = new_words[:new_quota]
+    new_take = [(w, None) for w in new_words[:new_quota]]
     review_quota = max(0, limit - len(new_take))
     review_take = review_words[:review_quota]
 
-    # 拼装 cards（去掉临时字段）
-    cards = []
-    for w in new_take + review_take:
-        card = {k: v for k, v in w.items() if not k.startswith("_")}
-        card["predicted_intervals"] = _predicted_intervals(w.get("srs"))
-        cards.append(card)
-
-    # 计算 review_due 总数（用于 stats）
-    review_due_total = 0
-    for w in words:
-        srs = w.get("srs")
-        if not srs:
-            continue
-        last = datetime.fromisoformat(srs["last_review_at"])
-        interval = fsrs.next_interval(srs["s"])
-        if now >= last + timedelta(days=interval):
-            review_due_total += 1
+    # 拼装 cards（不需要 strip _due_at，因为 word dict 根本没被改过）
+    cards = [
+        {**w, "predicted_intervals": _predicted_intervals(w.get("srs"))}
+        for w, _ in new_take + review_take
+    ]
 
     return {
         "cards": cards,
         "stats": {
             "total": len(words),
-            "due_today": min(len(new_words), new_due_today) + review_due_total,
+            "due_today": min(len(new_words), new_due_today) + len(review_words),
             "new_remaining": len(new_words),
-            "review_due": review_due_total,
+            "review_due": len(review_words),
             "new_today": _daily["new_today"],
             "review_today": _daily["review_today"],
         },
