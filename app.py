@@ -77,13 +77,18 @@ _enrich_batch_total: int = 0
 _enrich_batch_done: int = 0
 
 
+# ─── words.json 内存缓存 ────────────────────────────────
+# 单进程内首次 load_words() 后保留在内存，CRUD 不再每次全量读盘。
+_WORDS_CACHE: Optional[dict] = None
+
+
 # ─── SRS 每日统计 ────────────────────────────────────────
 _daily: dict = {
     "date": "",       # YYYY-MM-DD (Beijing)，跨日自动重置
     "new_today": 0,   # 今日新词复习数（srs was null → 已评）
     "review_today": 0,
 }
-DAILY_NEW_LIMIT = 20  # 兜底默认值；优先从 config.json 的 srs.daily_new_limit 读
+DAILY_NEW_LIMIT = 20  # 每日新词上限，可后续挪到 config
 
 import fsrs  # noqa: E402
 
@@ -98,37 +103,33 @@ if not os.path.exists(_CJK_FONT_PATH):
 # RLock 允许同一线程重入，_enrich_in_background 可在锁内 load+save
 _write_lock = threading.RLock()
 
-# ─── words.json 内存缓存 ─────────────────────────────────
-# 进程级单例 dict：首次 load_words 时从磁盘填充，后续读直接命中；
-# save_words 写盘成功后同步更新缓存（write-through）。
-# 已知限制：服务运行期间手动改 words.json 不会反映到缓存（需要 mtime 监听或重启）。
-_words_cache: Optional[dict] = None
-
 
 def load_words() -> dict:
-    """从内存缓存返回；未命中时读盘并缓存。损坏时备份+重置缓存为默认值。"""
-    global _words_cache
-    if _words_cache is not None:
-        return _words_cache
+    """读取 words.json（首次从磁盘读后缓存到内存）。损坏时备份并返回空数据。"""
+    global _WORDS_CACHE
+    if _WORDS_CACHE is not None:
+        return _WORDS_CACHE
     with _write_lock:
-        # 双重检查：可能其他线程在等待锁时已经填好缓存
-        if _words_cache is not None:
-            return _words_cache
+        # 双检：别的线程可能在等锁时已经加载
+        if _WORDS_CACHE is not None:
+            return _WORDS_CACHE
         if not DATA_FILE.exists():
-            _words_cache = {"words": []}
-            return _words_cache
+            save_words({"words": []})
+            # save_words 已经更新了 _WORDS_CACHE
+            return _WORDS_CACHE
         try:
-            _words_cache = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+            _WORDS_CACHE = json.loads(DATA_FILE.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
             backup = DATA_FILE.with_suffix(f".json.bak.{datetime.now().strftime('%Y%m%d_%H%M%S')}")
             DATA_FILE.rename(backup)
-            _words_cache = {"words": []}
-        return _words_cache
+            save_words({"words": []})
+            return _WORDS_CACHE
+        return _WORDS_CACHE
 
 
 def save_words(data: dict) -> None:
-    """原子写入磁盘 + 同步更新内存缓存（write-through）。"""
-    global _words_cache
+    """原子写入：先写临时文件再替换。同步更新内存缓存。"""
+    global _WORDS_CACHE
     with _write_lock:
         tmp = DATA_FILE.with_suffix(".tmp")
         tmp.write_text(
@@ -136,7 +137,7 @@ def save_words(data: dict) -> None:
             encoding="utf-8",
         )
         tmp.replace(DATA_FILE)
-        _words_cache = data  # 写穿：写盘成功后同步缓存
+        _WORDS_CACHE = data
 
 
 def now_iso() -> str:
@@ -485,15 +486,13 @@ def _predicted_intervals(srs: Optional[dict]) -> dict:
     """返回 {rating_int: 格式化字符串} 预览。"""
     from fsrs import format_interval
     if not srs:
-        # 新词：用 FSRS 的 initial_stability 算出 s，再走 next_interval。
-        # 这样权重改了 preview 也自动跟着变，不再硬编码。
-        # Again=1 不走 next_recall_stability（会负），固定 1 分钟（学完立即重看）。
-        out = {"1": "1m"}
-        for rating in (2, 3, 4):
-            s = fsrs.initial_stability(rating)
-            interval_days = fsrs.next_interval(s)
-            out[str(rating)] = format_interval(interval_days * 86400)
-        return out
+        # 新词：没有 D/S，preview 用经验默认（与初始 S 对应）
+        return {
+            "1": "1m",   # Again：1 分钟后重学
+            "2": "1d",
+            "3": "5d",
+            "4": "10d",
+        }
     last = datetime.fromisoformat(srs["last_review_at"])
     now = datetime.now(CHINA_TZ)
     elapsed_days = max((now - last).total_seconds() / 86400, 0)
@@ -527,7 +526,7 @@ def review_stats():
         interval = fsrs.next_interval(srs["s"])
         if now >= last + timedelta(days=interval):
             review_due += 1
-    new_due_today = max(0, config.get_srs_config().get("daily_new_limit", 20) - _daily["new_today"])
+    new_due_today = max(0, DAILY_NEW_LIMIT - _daily["new_today"])
     due_today = min(new_remaining, new_due_today) + review_due
     return {
         "total": len(words),
@@ -565,11 +564,8 @@ def review_due(new_limit: int = Query(default=20, ge=0, le=100),
             review_words.append((w, due_at))
     review_words.sort(key=lambda t: t[1])  # 最过期的先
 
-    # 队列前 N 是新词（受每日上限约束）。
-    # new_limit query param 允许 per-request override（默认从 config 读）
-    config_limit = config.get_srs_config().get("daily_new_limit", 20)
-    effective_new_limit = new_limit if new_limit > 0 else config_limit
-    new_due_today = max(0, effective_new_limit - _daily["new_today"])
+    # 队列前 N 是新词（受每日上限约束）
+    new_due_today = max(0, DAILY_NEW_LIMIT - _daily["new_today"])
     new_quota = min(len(new_words), new_due_today, limit)
     new_take = [(w, None) for w in new_words[:new_quota]]
     review_quota = max(0, limit - len(new_take))
@@ -680,13 +676,11 @@ def post_review(word_id: str, body: dict):
         }
         save_words(data)
 
-    # 累加每日统计 — 挪进 _write_lock 内（CPython GIL 下 dict += 大体原子，
-    # 但 _reset_daily_if_new_day() 会写 _daily["date"]，跨日边界可能丢一次增量）。
-    with _write_lock:
-        if was_new:
-            _daily["new_today"] += 1
-        else:
-            _daily["review_today"] += 1
+    # 累加每日统计 — 必须在 _write_lock 外做，避免长持锁
+    if was_new:
+        _daily["new_today"] += 1
+    else:
+        _daily["review_today"] += 1
 
     interval_seconds = fsrs.next_interval(s) * 86400
     return {
