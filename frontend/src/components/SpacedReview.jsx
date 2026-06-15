@@ -27,6 +27,8 @@ export default function SpacedReview({ cards, onRate, onSessionEnd }) {
   const [reviewedCount, setReviewedCount] = useState(0)
   const [newCount, setNewCount] = useState(0)
   const [reviewCount, setReviewCount] = useState(0)
+  const [newReviewed, setNewReviewed] = useState(0)
+  const [reviewReviewed, setReviewReviewed] = useState(0)
 
   useEffect(() => {
     setQueue(cards)
@@ -36,6 +38,8 @@ export default function SpacedReview({ cards, onRate, onSessionEnd }) {
     setReviewedCount(0)
     setNewCount(cards.filter(c => !c.srs).length)
     setReviewCount(cards.filter(c => c.srs).length)
+    setNewReviewed(0)
+    setReviewReviewed(0)
   }, [cards])
 
   const current = queue[index]
@@ -44,8 +48,13 @@ export default function SpacedReview({ cards, onRate, onSessionEnd }) {
     if (!current || !flipped) return
     const isNew = !current.srs
     setReviewedCount(c => c + 1)
-    if (isNew) setNewCount(c => c - 1)
-    else setReviewCount(c => c - 1)
+    if (isNew) {
+      setNewCount(c => c - 1)
+      setNewReviewed(c => c + 1)
+    } else {
+      setReviewCount(c => c - 1)
+      setReviewReviewed(c => c + 1)
+    }
 
     try {
       await onRate(current.id, rating)
@@ -54,8 +63,8 @@ export default function SpacedReview({ cards, onRate, onSessionEnd }) {
       return
     }
 
-    if (rating === 1 && isNew) {
-      // Again：队尾再插一次
+    if (rating === 1) {
+      // Again：队尾再插一次（spec：所有 Again 都在同 session 重学）
       setQueue(prev => [...prev, current])
     }
 
@@ -89,7 +98,7 @@ export default function SpacedReview({ cards, onRate, onSessionEnd }) {
     return (
       <div className="srs-done">
         <h2>本轮完成</h2>
-        <p>共复习 <b>{reviewedCount}</b> 个</p>
+        <p>本轮复习 <b>{reviewedCount}</b> 个（新词 {newReviewed} · 复习 {reviewReviewed}）</p>
         <button className="btn btn-primary" onClick={onSessionEnd} style={{ marginTop: 16 }}>
           再来一批
         </button>

@@ -467,16 +467,6 @@ def _reset_daily_if_new_day() -> None:
         _daily["review_today"] = 0
 
 
-def _word_due_at(word: dict) -> str:
-    """返回单词的 next_due_at ISO 字符串。新词 = '1970'（立即到期）。"""
-    srs = word.get("srs")
-    if not srs:
-        return "1970-01-01T00:00:00+08:00"
-    last = datetime.fromisoformat(srs["last_review_at"])
-    interval = fsrs.next_interval(srs["s"])
-    return (last + timedelta(days=interval)).isoformat()
-
-
 def _predicted_intervals(srs: Optional[dict]) -> dict:
     """返回 {rating_int: 格式化字符串} 预览。"""
     from fsrs import format_interval
