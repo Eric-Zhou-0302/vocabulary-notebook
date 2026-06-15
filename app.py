@@ -77,6 +77,17 @@ _enrich_batch_total: int = 0
 _enrich_batch_done: int = 0
 
 
+# ─── SRS 每日统计 ────────────────────────────────────────
+_daily: dict = {
+    "date": "",       # YYYY-MM-DD (Beijing)，跨日自动重置
+    "new_today": 0,   # 今日新词复习数（srs was null → 已评）
+    "review_today": 0,
+}
+DAILY_NEW_LIMIT = 20  # 每日新词上限，可后续挪到 config
+
+import fsrs  # noqa: E402
+
+
 # ─── PDF 字体路径 (fpdf2 纯 Python，零系统依赖) ──────────
 
 _CJK_FONT_PATH = "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"
@@ -398,6 +409,58 @@ def export_words(
         media_type="application/json; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename=vocabulary-{today}.json"},
     )
+
+
+# ─── SRS 辅助 ─────────────────────────────────────────
+
+def _today_iso() -> str:
+    return datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
+
+
+def _reset_daily_if_new_day() -> None:
+    """跨日重置 _daily 计数器。"""
+    today = _today_iso()
+    if _daily["date"] != today:
+        _daily["date"] = today
+        _daily["new_today"] = 0
+        _daily["review_today"] = 0
+
+
+def _word_due_at(word: dict) -> str:
+    """返回单词的 next_due_at ISO 字符串。新词 = '1970'（立即到期）。"""
+    srs = word.get("srs")
+    if not srs:
+        return "1970-01-01T00:00:00+08:00"
+    last = datetime.fromisoformat(srs["last_review_at"])
+    interval = fsrs.next_interval(srs["s"])
+    return (last + timedelta(days=interval)).isoformat()
+
+
+def _predicted_intervals(srs: Optional[dict]) -> dict:
+    """返回 {rating_int: 格式化字符串} 预览。"""
+    from fsrs import format_interval
+    if not srs:
+        # 新词：没有 D/S，preview 用经验默认（与初始 S 对应）
+        return {
+            "1": "1m",   # Again：1 分钟后重学
+            "2": "1d",
+            "3": "5d",
+            "4": "10d",
+        }
+    last = datetime.fromisoformat(srs["last_review_at"])
+    now = datetime.now(CHINA_TZ)
+    elapsed_days = max((now - last).total_seconds() / 86400, 0)
+    d, s = srs["d"], srs["s"]
+    r = fsrs.retrievability(elapsed_days, s)
+    out = {}
+    for rating in (1, 2, 3, 4):
+        if rating == 1:
+            new_s = fsrs.next_forget_stability(d, s, r)
+        else:
+            new_s = fsrs.next_recall_stability(d, s, r, rating)
+        interval_days = fsrs.next_interval(new_s)
+        out[str(rating)] = format_interval(interval_days * 86400)
+    return out
 
 
 @app.post("/api/words/enrich-missing")
