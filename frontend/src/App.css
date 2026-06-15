@@ -1067,3 +1067,92 @@ select option { background: var(--surface); color: var(--text); }
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ─── Spaced Review ─────────────────────── */
+.srs-container {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.srs-progress {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  margin-bottom: 16px;
+  font-family: var(--font-display);
+  font-style: italic;
+}
+
+.srs-rating-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.srs-rating-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 12px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition:
+    transform 0.15s var(--ease-out),
+    background 0.15s var(--ease-out),
+    border-color 0.15s var(--ease-out);
+}
+
+.srs-rating-btn:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+}
+
+.srs-rating-btn .rating-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--heading);
+  letter-spacing: 0.04em;
+}
+
+.srs-rating-btn .rating-interval {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-display);
+  font-style: italic;
+}
+
+.srs-rating-btn.rating-again  { border-left: 3px solid var(--error); }
+.srs-rating-btn.rating-hard   { border-left: 3px solid var(--warn); }
+.srs-rating-btn.rating-good   { border-left: 3px solid var(--success); }
+.srs-rating-btn.rating-easy   { border-left: 3px solid var(--info); }
+
+.srs-done {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-dim);
+}
+
+.srs-done h2 {
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--heading);
+  margin-bottom: 12px;
+}
+
+.srs-done p {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.srs-done-hint {
+  color: var(--accent) !important;
+  font-style: italic;
+}
