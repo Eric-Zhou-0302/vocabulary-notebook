@@ -504,6 +504,35 @@ def _predicted_intervals(srs: Optional[dict]) -> dict:
     return out
 
 
+@app.get("/api/review/stats")
+def review_stats():
+    """轻量端点：复习统计。App nav 角标用。"""
+    _reset_daily_if_new_day()
+    data = load_words()
+    words = [w for w in data["words"] if w.get("definition", "").strip()]
+    new_remaining = sum(1 for w in words if not w.get("srs"))
+    now = datetime.now(CHINA_TZ)
+    review_due = 0
+    for w in words:
+        srs = w.get("srs")
+        if not srs:
+            continue
+        last = datetime.fromisoformat(srs["last_review_at"])
+        interval = fsrs.next_interval(srs["s"])
+        if now >= last + timedelta(days=interval):
+            review_due += 1
+    new_due_today = max(0, DAILY_NEW_LIMIT - _daily["new_today"])
+    due_today = min(new_remaining, new_due_today) + review_due
+    return {
+        "total": len(words),
+        "due_today": due_today,
+        "new_remaining": new_remaining,
+        "review_due": review_due,
+        "new_today": _daily["new_today"],
+        "review_today": _daily["review_today"],
+    }
+
+
 @app.post("/api/words/enrich-missing")
 async def enrich_missing():
     """扫描缺失 definition 的单词，跳过冷却期内已完成/进行中的。"""
