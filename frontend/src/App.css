@@ -1171,3 +1171,11 @@ select option { background: var(--surface); color: var(--text); }
   letter-spacing: 0;
   vertical-align: 1px;
 }
+
+/* ─── Search Highlight ─────────────────── */
+.word-card mark {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}

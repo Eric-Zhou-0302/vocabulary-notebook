@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { fetchWords, fetchDates, enrichMissing } from '../api'
 import { useSSE } from '../useSSE'
 import WordCard from '../components/WordCard'
@@ -7,12 +7,51 @@ import ExportMenu from '../components/ExportMenu'
 import EnrichProgress from '../components/EnrichProgress'
 
 export default function WordList() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const pageParam = parseInt(searchParams.get('page') || '1', 10)
+
   const [words, setWords] = useState([])
   const [dates, setDates] = useState([])
-  const [q, setQ] = useState('')
+  const [qInput, setQInput] = useState('')
+  const [debouncedQ, setDebouncedQ] = useState('')
   const [date, setDate] = useState('')
-  const [page, setPage] = useState(1)
+  const [sort, setSort] = useState('')
+  const [letter, setLetter] = useState('')
+  const [availableLetters, setAvailableLetters] = useState([])
+  const [page, setPage] = useState(pageParam)
   const [totalPages, setTotalPages] = useState(1)
+  const [pageInput, setPageInput] = useState(String(pageParam))
+
+  // page 变化时同步到 URL
+  useEffect(() => {
+    setSearchParams(p => {
+      const next = new URLSearchParams(p)
+      next.set('page', String(page))
+      return next
+    })
+    setPageInput(String(page))
+  }, [page, setSearchParams])
+
+  // page 切换函数，同时更新 URL
+  function goToPage(newPage) {
+    setPage(newPage)
+    setSearchParams(p => {
+      const next = new URLSearchParams(p)
+      next.set('page', String(newPage))
+      return next
+    })
+  }
+
+  // 页码输入框提交：把字符串解析为正整数并 clamp 到 [1, totalPages]
+  function commitPageInput(raw) {
+    const n = parseInt(raw, 10)
+    if (Number.isFinite(n) && n >= 1 && n <= totalPages) {
+      if (n !== page) goToPage(n)
+      else setPageInput(String(page))
+    } else {
+      setPageInput(String(page))
+    }
+  }
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [enriching, setEnriching] = useState(false)
@@ -21,17 +60,29 @@ export default function WordList() {
 
   useEffect(() => { fetchDates().then(d => setDates(d.dates)).catch(() => {}) }, [])
 
+  // 搜索框 debounce 200ms — qInput 即时更新（输入流畅），debouncedQ 延迟更新（驱动 API）
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQ(qInput), 200)
+    return () => clearTimeout(timer)
+  }, [qInput])
+
   useEffect(() => {
     setLoading(true)
     setError('')
-    fetchWords({ q, date, page })
+    fetchWords({ q: debouncedQ, date, page, sort, letter })
       .then(data => {
         setWords(data.words)
         setTotalPages(data.pages)
+        setAvailableLetters(data.available_letters || [])
       })
       .catch(() => setError('加载失败，请确认后端服务是否运行'))
       .finally(() => setLoading(false))
-  }, [q, date, page])
+  }, [debouncedQ, date, page, sort, letter])
+
+  function toggleLetter(l) {
+    setLetter(prev => (prev === l ? '' : l))
+    setPage(1)
+  }
 
   // SSE 实时更新 — 模型补充数据后无需刷新
   const handleEnriched = useCallback((wordId, data) => {
@@ -60,13 +111,19 @@ export default function WordList() {
       const result = await enrichMissing()
       setToast(result.message)
       setTimeout(() => setToast(''), 4000)
+      // 不在这里 setEnriching(false) — 后端可能还要跑很久。
+      // 由 EnrichProgress 通过 useEnrichProgress 检测到后端完成时回调
     } catch {
       setToast('补全请求失败，请确认后端运行中')
       setTimeout(() => setToast(''), 4000)
-    } finally {
-      setEnriching(false)
+      setEnriching(false)  // 请求失败：没东西可补，关掉 bar
     }
   }
+
+  // 后端报"批次已完成"时关掉进度条
+  const handleEnrichComplete = useCallback(() => {
+    setEnriching(false)
+  }, [])
 
   return (
     <div>
@@ -80,14 +137,23 @@ export default function WordList() {
         <input
           type="text"
           placeholder="搜索单词或释义…"
-          value={q}
-          onChange={e => { setQ(e.target.value); setPage(1) }}
+          value={qInput}
+          onChange={e => { setQInput(e.target.value); setPage(1) }}
         />
         <select value={date} onChange={e => { setDate(e.target.value); setPage(1) }}>
           <option value="">全部日期</option>
           {dates.map(d => (
             <option key={d} value={d}>{d}</option>
           ))}
+        </select>
+        <select
+          value={sort}
+          onChange={e => { setSort(e.target.value); setPage(1) }}
+          title="排序方式"
+        >
+          <option value="">默认顺序</option>
+          <option value="alpha_asc">首字母 A→Z</option>
+          <option value="alpha_desc">首字母 Z→A</option>
         </select>
         <button
           className="btn btn-secondary"
@@ -97,11 +163,35 @@ export default function WordList() {
         >
           {enriching ? '补全中…' : '补全缺失'}
         </button>
-        <ExportMenu q={q} date={date} />
+        <ExportMenu q={debouncedQ} date={date} sort={sort} />
         <Link to="/word/new" className="btn btn-primary">+ 添加</Link>
       </div>
 
-      <EnrichProgress active={enriching} />
+      <nav className="alphabet-nav" aria-label="按首字母筛选">
+        {Array.from('abcdefghijklmnopqrstuvwxyz').map(l => {
+          const has = availableLetters.includes(l)
+          const active = letter === l
+          const stateClass = active ? 'active' : has ? 'has-match' : 'empty'
+          return (
+            <button
+              key={l}
+              type="button"
+              className={`alpha ${stateClass}`}
+              onClick={() => (active || has) && toggleLetter(l)}
+              disabled={!active && !has}
+              title={
+                active ? `清除首字母 ${l.toUpperCase()} 筛选`
+                  : has ? `查看以 ${l.toUpperCase()} 开头的单词`
+                  : `无 ${l.toUpperCase()} 开头的单词`
+              }
+            >
+              {l}
+            </button>
+          )
+        })}
+      </nav>
+
+      <EnrichProgress active={enriching} onComplete={handleEnrichComplete} />
 
       {error && <div className="empty-state"><p>{error}</p></div>}
       {!error && loading ? (
@@ -114,9 +204,13 @@ export default function WordList() {
             <circle cx="36" cy="36" r="9" stroke="currentColor" strokeWidth="1.5"/>
             <path d="M3336h6M36 33v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
-          <p>{q || date ? '无匹配单词' : '还没有单词'}</p>
-          {q || date ? (
-            <button className="btn btn-ghost" onClick={() => { setQ(''); setDate('') }}>
+          <p>
+            {debouncedQ || date || letter
+              ? `无匹配单词${letter ? `（首字母 ${letter.toUpperCase()}）` : ''}`
+              : '还没有单词'}
+          </p>
+          {debouncedQ || date || letter ? (
+            <button className="btn btn-ghost" onClick={() => { setQInput(''); setDebouncedQ(''); setDate(''); setLetter('') }}>
               清除筛选
             </button>
           ) : (
@@ -125,21 +219,39 @@ export default function WordList() {
         </div>
       ) : (
         <>
-          {words.map((w, i) => <WordCard key={w.id} word={w} index={i} />)}
+          {words.map((w, i) => <WordCard key={w.id} word={w} q={debouncedQ} index={i} />)}
           {totalPages > 1 && (
             <div className="pagination">
               <button
                 className="btn btn-secondary"
                 disabled={page <= 1}
-                onClick={() => setPage(p => p - 1)}
+                onClick={() => goToPage(page - 1)}
               >
                 上一页
               </button>
-              <span>{page} / {totalPages}</span>
+              <span className="page-jump">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="page-input"
+                  value={pageInput}
+                  onChange={e => setPageInput(e.target.value.replace(/\D/g, ''))}
+                  onBlur={e => commitPageInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      e.currentTarget.blur()
+                    }
+                  }}
+                  aria-label="跳转到页码"
+                />
+                <span> / {totalPages}</span>
+              </span>
               <button
                 className="btn btn-secondary"
                 disabled={page >= totalPages}
-                onClick={() => setPage(p => p + 1)}
+                onClick={() => goToPage(page + 1)}
               >
                 下一页
               </button>
