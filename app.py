@@ -98,24 +98,37 @@ if not os.path.exists(_CJK_FONT_PATH):
 # RLock 允许同一线程重入，_enrich_in_background 可在锁内 load+save
 _write_lock = threading.RLock()
 
+# ─── words.json 内存缓存 ─────────────────────────────────
+# 进程级单例 dict：首次 load_words 时从磁盘填充，后续读直接命中；
+# save_words 写盘成功后同步更新缓存（write-through）。
+# 已知限制：服务运行期间手动改 words.json 不会反映到缓存（需要 mtime 监听或重启）。
+_words_cache: Optional[dict] = None
+
 
 def load_words() -> dict:
-    """读取 words.json，不存在时初始化，损坏时备份并返回空数据"""
+    """从内存缓存返回；未命中时读盘并缓存。损坏时备份+重置缓存为默认值。"""
+    global _words_cache
+    if _words_cache is not None:
+        return _words_cache
     with _write_lock:
+        # 双重检查：可能其他线程在等待锁时已经填好缓存
+        if _words_cache is not None:
+            return _words_cache
         if not DATA_FILE.exists():
-            save_words({"words": []})
-            return {"words": []}
+            _words_cache = {"words": []}
+            return _words_cache
         try:
-            return json.loads(DATA_FILE.read_text(encoding="utf-8"))
+            _words_cache = json.loads(DATA_FILE.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
             backup = DATA_FILE.with_suffix(f".json.bak.{datetime.now().strftime('%Y%m%d_%H%M%S')}")
             DATA_FILE.rename(backup)
-            save_words({"words": []})
-            return {"words": []}
+            _words_cache = {"words": []}
+        return _words_cache
 
 
 def save_words(data: dict) -> None:
-    """原子写入：先写临时文件再替换，防止并发写丢数据和写入中断损坏"""
+    """原子写入磁盘 + 同步更新内存缓存（write-through）。"""
+    global _words_cache
     with _write_lock:
         tmp = DATA_FILE.with_suffix(".tmp")
         tmp.write_text(
@@ -123,6 +136,7 @@ def save_words(data: dict) -> None:
             encoding="utf-8",
         )
         tmp.replace(DATA_FILE)
+        _words_cache = data  # 写穿：写盘成功后同步缓存
 
 
 def now_iso() -> str:
