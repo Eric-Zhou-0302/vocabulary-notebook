@@ -635,6 +635,55 @@ def enrich_progress():
     }
 
 
+@app.post("/api/words/{word_id}/review")
+def post_review(word_id: str, body: dict):
+    """记录一次复习，调 FSRS 更新 SRS 状态。"""
+    _reset_daily_if_new_day()
+    rating = body.get("rating")
+    if rating not in (1, 2, 3, 4):
+        raise HTTPException(status_code=422, detail="rating 必须是 1/2/3/4")
+
+    with _write_lock:
+        data = load_words()
+        word = next((w for w in data["words"] if w["id"] == word_id), None)
+        if not word:
+            raise HTTPException(status_code=404, detail="单词不存在")
+
+        was_new = word.get("srs") is None
+        now = datetime.now(CHINA_TZ)
+
+        if was_new:
+            # 新词：初始化 D, S
+            d = fsrs.initial_difficulty(rating)
+            s = fsrs.initial_stability(rating)
+        else:
+            srs = word["srs"]
+            last = datetime.fromisoformat(srs["last_review_at"])
+            elapsed_days = max((now - last).total_seconds() / 86400, 0)
+            d, s = fsrs.update(srs["d"], srs["s"], rating, elapsed_days)
+
+        word["srs"] = {
+            "d": d,
+            "s": s,
+            "last_review_at": now.isoformat(),
+            "reps": (word.get("srs", {}) or {}).get("reps", 0) + 1,
+            "lapses": (word.get("srs", {}) or {}).get("lapses", 0) + (1 if rating == 1 else 0),
+        }
+        save_words(data)
+
+    # 累加每日统计 — 必须在 _write_lock 外做，避免长持锁
+    if was_new:
+        _daily["new_today"] += 1
+    else:
+        _daily["review_today"] += 1
+
+    interval_seconds = fsrs.next_interval(s) * 86400
+    return {
+        "word": word,
+        "next_interval_seconds": interval_seconds,
+    }
+
+
 @app.get("/api/words/{word_id}")
 def get_word(word_id: str):
     data = load_words()
