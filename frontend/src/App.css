@@ -18,6 +18,8 @@
   --border-light: #4a4540;
   --success: #7aa365;
   --error: #c45a4a;
+  --warn: #d68a3a;   /* 暖橙，Hard 评分 */
+  --info: #5a85b8;   /* 冷蓝，Easy 评分 */
   --font-display: 'Cormorant Garamond', 'Noto Serif SC', serif;
   --font-body: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -44,6 +46,8 @@
   --border-light: #c4b8a5;
   --success: #5a7d4a;
   --error: #b8453a;
+  --warn: #c97a2a;
+  --info: #4a6f9a;
   --shadow-card: 0 2px 16px rgba(0,0,0,0.08);
   --shadow-modal: 0 12px 40px rgba(0,0,0,0.15);
   --noise-opacity: 0.012;
@@ -396,6 +400,103 @@ select option { background: var(--surface); color: var(--text); }
   /* inherits from select above */
 }
 
+/* ─── Alphabet Nav ───────────────────────── */
+/* 卡片目录抽屉式 A-Z 索引 — sticky 浮在 toolbar 下 */
+.alphabet-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 0;
+  padding: 12px 16px 14px;
+  margin: -8px -24px 24px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: linear-gradient(
+    to bottom,
+    var(--bg) 70%,
+    color-mix(in srgb, var(--bg) 0%, transparent) 100%
+  );
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.alphabet-nav::-webkit-scrollbar { display: none; }
+
+.alphabet-nav::before,
+.alphabet-nav::after {
+  content: '·';
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--accent);
+  margin: 0 10px;
+  opacity: 0.5;
+  flex: 0 0 auto;
+}
+
+.alphabet-nav .alpha {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 500;
+  font-style: italic;
+  color: var(--text-dim);
+  width: 26px;
+  height: 26px;
+  margin: 0 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 2px;
+  flex: 0 0 auto;
+  position: relative;
+  transition:
+    color 0.18s var(--ease-out),
+    background 0.18s var(--ease-out),
+    border-color 0.18s var(--ease-out),
+    transform 0.18s var(--ease-out),
+    box-shadow 0.18s var(--ease-out);
+}
+
+/* 空字母：影厅座椅靠背都不愿意坐的幽灵 */
+.alphabet-nav .alpha.empty {
+  color: var(--text-muted);
+  opacity: 0.22;
+  cursor: default;
+  pointer-events: none;
+}
+
+.alphabet-nav .alpha.has-match {
+  color: var(--accent);
+}
+
+.alphabet-nav .alpha.has-match:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* 活动字母：抽屉被抽出来的感觉 */
+.alphabet-nav .alpha.active {
+  color: var(--ink);
+  background: var(--accent);
+  font-weight: 700;
+  font-style: normal;
+  transform: translateY(-1px);
+  box-shadow:
+    0 2px 6px color-mix(in srgb, var(--accent) 50%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--paper) 30%, transparent);
+  border-color: var(--accent-dim);
+}
+.alphabet-nav .alpha.active:hover {
+  background: var(--accent-dim);
+  color: var(--paper);
+}
+
 /* ─── Enrich Progress ────────────────────── */
 .enrich-progress {
   margin-bottom: 20px;
@@ -466,6 +567,29 @@ select option { background: var(--surface); color: var(--text); }
 }
 
 .pagination button { min-width: 40px; }
+
+.page-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.page-input {
+  width: 44px;
+  padding: 4px 6px;
+  text-align: center;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  outline: none;
+  transition: border-color 0.15s var(--ease-out);
+}
+.page-input:focus {
+  border-color: var(--accent);
+}
 
 /* ─── Tabs ───────────────────────────────── */
 .tabs {
