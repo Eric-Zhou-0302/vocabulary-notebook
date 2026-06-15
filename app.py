@@ -549,8 +549,11 @@ def review_due(new_limit: int = Query(default=20, ge=0, le=100),
             review_words.append((w, due_at))
     review_words.sort(key=lambda t: t[1])  # 最过期的先
 
-    # 队列前 N 是新词（受每日上限约束）
-    new_due_today = max(0, config.get_srs_config().get("daily_new_limit", 20) - _daily["new_today"])
+    # 队列前 N 是新词（受每日上限约束）。
+    # new_limit query param 允许 per-request override（默认从 config 读）
+    config_limit = config.get_srs_config().get("daily_new_limit", 20)
+    effective_new_limit = new_limit if new_limit > 0 else config_limit
+    new_due_today = max(0, effective_new_limit - _daily["new_today"])
     new_quota = min(len(new_words), new_due_today, limit)
     new_take = [(w, None) for w in new_words[:new_quota]]
     review_quota = max(0, limit - len(new_take))
