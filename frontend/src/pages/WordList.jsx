@@ -6,7 +6,7 @@ import WordCard from '../components/WordCard'
 import ExportMenu from '../components/ExportMenu'
 import EnrichProgress from '../components/EnrichProgress'
 
-export default function WordList() {
+export default function WordList({ searchInputRef }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const pageParam = parseInt(searchParams.get('page') || '1', 10)
 
@@ -135,6 +135,7 @@ export default function WordList() {
       )}
       <div className="toolbar">
         <input
+          ref={searchInputRef}
           type="text"
           placeholder="搜索单词或释义…"
           value={qInput}

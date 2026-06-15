@@ -1,3 +1,4 @@
+import { useState, useRef, useCallback } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import WordList from './pages/WordList'
 import WordNew from './pages/WordNew'
@@ -6,10 +7,17 @@ import Review from './pages/Review'
 import ThemeToggle from './components/ThemeToggle'
 import ModelStatus from './components/ModelStatus'
 import { useDueCount } from './useDueCount'
+import { useGlobalShortcuts } from './useGlobalShortcuts'
+import HelpModal from './components/HelpModal'
 
 export default function App() {
   const location = useLocation()
   const dueToday = useDueCount()
+  const searchInputRef = useRef(null)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const toggleHelp = useCallback(() => setHelpOpen(o => !o), [])
+
+  useGlobalShortcuts({ searchInputRef, toggleHelp })
 
   return (
     <div className="app">
@@ -35,12 +43,13 @@ export default function App() {
       </header>
       <main className="app-main">
         <Routes>
-          <Route path="/" element={<WordList />} />
+          <Route path="/" element={<WordList searchInputRef={searchInputRef} />} />
           <Route path="/word/new" element={<WordNew />} />
           <Route path="/word/:id" element={<WordDetail />} />
           <Route path="/review" element={<Review />} />
         </Routes>
       </main>
+      <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   )
 }
