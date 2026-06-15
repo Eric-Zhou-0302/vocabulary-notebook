@@ -471,13 +471,15 @@ def _predicted_intervals(srs: Optional[dict]) -> dict:
     """返回 {rating_int: 格式化字符串} 预览。"""
     from fsrs import format_interval
     if not srs:
-        # 新词：没有 D/S，preview 用经验默认（与初始 S 对应）
-        return {
-            "1": "1m",   # Again：1 分钟后重学
-            "2": "1d",
-            "3": "5d",
-            "4": "10d",
-        }
+        # 新词：用 FSRS 的 initial_stability 算出 s，再走 next_interval。
+        # 这样权重改了 preview 也自动跟着变，不再硬编码。
+        # Again=1 不走 next_recall_stability（会负），固定 1 分钟（学完立即重看）。
+        out = {"1": "1m"}
+        for rating in (2, 3, 4):
+            s = fsrs.initial_stability(rating)
+            interval_days = fsrs.next_interval(s)
+            out[str(rating)] = format_interval(interval_days * 86400)
+        return out
     last = datetime.fromisoformat(srs["last_review_at"])
     now = datetime.now(CHINA_TZ)
     elapsed_days = max((now - last).total_seconds() / 86400, 0)
