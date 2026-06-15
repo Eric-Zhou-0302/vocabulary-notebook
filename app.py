@@ -83,7 +83,7 @@ _daily: dict = {
     "new_today": 0,   # 今日新词复习数（srs was null → 已评）
     "review_today": 0,
 }
-DAILY_NEW_LIMIT = 20  # 每日新词上限，可后续挪到 config
+DAILY_NEW_LIMIT = 20  # 兜底默认值；优先从 config.json 的 srs.daily_new_limit 读
 
 import fsrs  # noqa: E402
 
@@ -511,7 +511,7 @@ def review_stats():
         interval = fsrs.next_interval(srs["s"])
         if now >= last + timedelta(days=interval):
             review_due += 1
-    new_due_today = max(0, DAILY_NEW_LIMIT - _daily["new_today"])
+    new_due_today = max(0, config.get_srs_config().get("daily_new_limit", 20) - _daily["new_today"])
     due_today = min(new_remaining, new_due_today) + review_due
     return {
         "total": len(words),
@@ -550,7 +550,7 @@ def review_due(new_limit: int = Query(default=20, ge=0, le=100),
     review_words.sort(key=lambda t: t[1])  # 最过期的先
 
     # 队列前 N 是新词（受每日上限约束）
-    new_due_today = max(0, DAILY_NEW_LIMIT - _daily["new_today"])
+    new_due_today = max(0, config.get_srs_config().get("daily_new_limit", 20) - _daily["new_today"])
     new_quota = min(len(new_words), new_due_today, limit)
     new_take = [(w, None) for w in new_words[:new_quota]]
     review_quota = max(0, limit - len(new_take))
