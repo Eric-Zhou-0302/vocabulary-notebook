@@ -5,9 +5,11 @@ import WordDetail from './pages/WordDetail'
 import Review from './pages/Review'
 import ThemeToggle from './components/ThemeToggle'
 import ModelStatus from './components/ModelStatus'
+import { useDueCount } from './useDueCount'
 
 export default function App() {
   const location = useLocation()
+  const dueToday = useDueCount()
 
   return (
     <div className="app">
@@ -22,11 +24,11 @@ export default function App() {
           <Link to="/" className={location.pathname === '/' ? 'active' : ''}>
             单词列表
           </Link>
+          <Link to="/review" className={location.pathname === '/review' ? 'active' : ''}>
+            复习 {dueToday > 0 && <span className="nav-badge">{dueToday}</span>}
+          </Link>
           <Link to="/word/new" className={location.pathname === '/word/new' ? 'active' : ''}>
             添加单词
-          </Link>
-          <Link to="/review" className={location.pathname === '/review' ? 'active' : ''}>
-            复习
           </Link>
           <ThemeToggle />
         </nav>

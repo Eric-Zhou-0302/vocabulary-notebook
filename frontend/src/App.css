@@ -1156,3 +1156,18 @@ select option { background: var(--surface); color: var(--text); }
   color: var(--accent) !important;
   font-style: italic;
 }
+
+/* ─── Nav Badge ─────────────────────────── */
+.nav-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  background: var(--accent);
+  color: var(--ink);
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  vertical-align: 1px;
+}
