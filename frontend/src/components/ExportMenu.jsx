@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { exportUrl } from '../api'
 
-export default function ExportMenu({ q, date }) {
+export default function ExportMenu({ q, date, sort }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -14,7 +14,7 @@ export default function ExportMenu({ q, date }) {
   }, [])
 
   function doExport(format) {
-    window.open(exportUrl(format, { q, date }), '_blank')
+    window.open(exportUrl(format, { q, date, sort }), '_blank')
     setOpen(false)
   }
 

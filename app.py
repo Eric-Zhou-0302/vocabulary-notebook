@@ -77,22 +77,6 @@ _enrich_batch_total: int = 0
 _enrich_batch_done: int = 0
 
 
-# ─── words.json 内存缓存 ────────────────────────────────
-# 单进程内首次 load_words() 后保留在内存，CRUD 不再每次全量读盘。
-_WORDS_CACHE: Optional[dict] = None
-
-
-# ─── SRS 每日统计 ────────────────────────────────────────
-_daily: dict = {
-    "date": "",       # YYYY-MM-DD (Beijing)，跨日自动重置
-    "new_today": 0,   # 今日新词复习数（srs was null → 已评）
-    "review_today": 0,
-}
-DAILY_NEW_LIMIT = 20  # 每日新词上限，可后续挪到 config
-
-import fsrs  # noqa: E402
-
-
 # ─── PDF 字体路径 (fpdf2 纯 Python，零系统依赖) ──────────
 
 _CJK_FONT_PATH = "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"
@@ -105,31 +89,22 @@ _write_lock = threading.RLock()
 
 
 def load_words() -> dict:
-    """读取 words.json（首次从磁盘读后缓存到内存）。损坏时备份并返回空数据。"""
-    global _WORDS_CACHE
-    if _WORDS_CACHE is not None:
-        return _WORDS_CACHE
+    """读取 words.json，不存在时初始化，损坏时备份并返回空数据"""
     with _write_lock:
-        # 双检：别的线程可能在等锁时已经加载
-        if _WORDS_CACHE is not None:
-            return _WORDS_CACHE
         if not DATA_FILE.exists():
             save_words({"words": []})
-            # save_words 已经更新了 _WORDS_CACHE
-            return _WORDS_CACHE
+            return {"words": []}
         try:
-            _WORDS_CACHE = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+            return json.loads(DATA_FILE.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
             backup = DATA_FILE.with_suffix(f".json.bak.{datetime.now().strftime('%Y%m%d_%H%M%S')}")
             DATA_FILE.rename(backup)
             save_words({"words": []})
-            return _WORDS_CACHE
-        return _WORDS_CACHE
+            return {"words": []}
 
 
 def save_words(data: dict) -> None:
-    """原子写入：先写临时文件再替换。同步更新内存缓存。"""
-    global _WORDS_CACHE
+    """原子写入：先写临时文件再替换，防止并发写丢数据和写入中断损坏"""
     with _write_lock:
         tmp = DATA_FILE.with_suffix(".tmp")
         tmp.write_text(
@@ -137,7 +112,6 @@ def save_words(data: dict) -> None:
             encoding="utf-8",
         )
         tmp.replace(DATA_FILE)
-        _WORDS_CACHE = data
 
 
 def now_iso() -> str:
@@ -467,129 +441,6 @@ def _maybe_reset_batch_if_idle() -> None:
         _enrich_batch_done = 0
 
 
-# ─── SRS 辅助 ─────────────────────────────────────────
-
-def _today_iso() -> str:
-    return datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
-
-
-def _reset_daily_if_new_day() -> None:
-    """跨日重置 _daily 计数器。"""
-    today = _today_iso()
-    if _daily["date"] != today:
-        _daily["date"] = today
-        _daily["new_today"] = 0
-        _daily["review_today"] = 0
-
-
-def _predicted_intervals(srs: Optional[dict]) -> dict:
-    """返回 {rating_int: 格式化字符串} 预览。"""
-    from fsrs import format_interval
-    if not srs:
-        # 新词：没有 D/S，preview 用经验默认（与初始 S 对应）
-        return {
-            "1": "1m",   # Again：1 分钟后重学
-            "2": "1d",
-            "3": "5d",
-            "4": "10d",
-        }
-    last = datetime.fromisoformat(srs["last_review_at"])
-    now = datetime.now(CHINA_TZ)
-    elapsed_days = max((now - last).total_seconds() / 86400, 0)
-    d, s = srs["d"], srs["s"]
-    r = fsrs.retrievability(elapsed_days, s)
-    out = {}
-    for rating in (1, 2, 3, 4):
-        if rating == 1:
-            new_s = fsrs.next_forget_stability(d, s, r)
-        else:
-            new_s = fsrs.next_recall_stability(d, s, r, rating)
-        interval_days = fsrs.next_interval(new_s)
-        out[str(rating)] = format_interval(interval_days * 86400)
-    return out
-
-
-@app.get("/api/review/stats")
-def review_stats():
-    """轻量端点：复习统计。App nav 角标用。"""
-    _reset_daily_if_new_day()
-    data = load_words()
-    words = [w for w in data["words"] if w.get("definition", "").strip()]
-    new_remaining = sum(1 for w in words if not w.get("srs"))
-    now = datetime.now(CHINA_TZ)
-    review_due = 0
-    for w in words:
-        srs = w.get("srs")
-        if not srs:
-            continue
-        last = datetime.fromisoformat(srs["last_review_at"])
-        interval = fsrs.next_interval(srs["s"])
-        if now >= last + timedelta(days=interval):
-            review_due += 1
-    new_due_today = max(0, DAILY_NEW_LIMIT - _daily["new_today"])
-    due_today = min(new_remaining, new_due_today) + review_due
-    return {
-        "total": len(words),
-        "due_today": due_today,
-        "new_remaining": new_remaining,
-        "review_due": review_due,
-        "new_today": _daily["new_today"],
-        "review_today": _daily["review_today"],
-    }
-
-
-@app.get("/api/review/due")
-def review_due(new_limit: int = Query(default=20, ge=0, le=100),
-               limit: int = Query(default=20, ge=1, le=100)):
-    """下一批 due 卡片（新词 + 复习词混合）。"""
-    _reset_daily_if_new_day()
-    data = load_words()
-    words = [w for w in data["words"] if w.get("definition", "").strip()]
-
-    now = datetime.now(CHINA_TZ)
-    new_words = sorted(
-        [w for w in words if not w.get("srs")],
-        key=lambda w: w["created_at"],
-    )
-
-    # review_words 是 (word, due_at) 元组列表，避开给 word dict 写临时字段
-    review_words = []
-    for w in words:
-        srs = w.get("srs")
-        if not srs:
-            continue
-        last = datetime.fromisoformat(srs["last_review_at"])
-        due_at = last + timedelta(days=fsrs.next_interval(srs["s"]))
-        if now >= due_at:
-            review_words.append((w, due_at))
-    review_words.sort(key=lambda t: t[1])  # 最过期的先
-
-    # 队列前 N 是新词（受每日上限约束）
-    new_due_today = max(0, DAILY_NEW_LIMIT - _daily["new_today"])
-    new_quota = min(len(new_words), new_due_today, limit)
-    new_take = [(w, None) for w in new_words[:new_quota]]
-    review_quota = max(0, limit - len(new_take))
-    review_take = review_words[:review_quota]
-
-    # 拼装 cards（不需要 strip _due_at，因为 word dict 根本没被改过）
-    cards = [
-        {**w, "predicted_intervals": _predicted_intervals(w.get("srs"))}
-        for w, _ in new_take + review_take
-    ]
-
-    return {
-        "cards": cards,
-        "stats": {
-            "total": len(words),
-            "due_today": min(len(new_words), new_due_today) + len(review_words),
-            "new_remaining": len(new_words),
-            "review_due": len(review_words),
-            "new_today": _daily["new_today"],
-            "review_today": _daily["review_today"],
-        },
-    }
-
-
 @app.post("/api/words/enrich-missing")
 async def enrich_missing():
     """扫描缺失 definition 的单词，跳过冷却期内已完成/进行中的。"""
@@ -637,55 +488,6 @@ def enrich_progress():
         "batch_done": _enrich_batch_done,
         "total_missing": total_missing,
         "is_processing": _enrich_current is not None,
-    }
-
-
-@app.post("/api/words/{word_id}/review")
-def post_review(word_id: str, body: dict):
-    """记录一次复习，调 FSRS 更新 SRS 状态。"""
-    _reset_daily_if_new_day()
-    rating = body.get("rating")
-    if rating not in (1, 2, 3, 4):
-        raise HTTPException(status_code=422, detail="rating 必须是 1/2/3/4")
-
-    with _write_lock:
-        data = load_words()
-        word = next((w for w in data["words"] if w["id"] == word_id), None)
-        if not word:
-            raise HTTPException(status_code=404, detail="单词不存在")
-
-        was_new = word.get("srs") is None
-        now = datetime.now(CHINA_TZ)
-
-        if was_new:
-            # 新词：初始化 D, S
-            d = fsrs.initial_difficulty(rating)
-            s = fsrs.initial_stability(rating)
-        else:
-            srs = word["srs"]
-            last = datetime.fromisoformat(srs["last_review_at"])
-            elapsed_days = max((now - last).total_seconds() / 86400, 0)
-            d, s = fsrs.update(srs["d"], srs["s"], rating, elapsed_days)
-
-        word["srs"] = {
-            "d": d,
-            "s": s,
-            "last_review_at": now.isoformat(),
-            "reps": (word.get("srs", {}) or {}).get("reps", 0) + 1,
-            "lapses": (word.get("srs", {}) or {}).get("lapses", 0) + (1 if rating == 1 else 0),
-        }
-        save_words(data)
-
-    # 累加每日统计 — 必须在 _write_lock 外做，避免长持锁
-    if was_new:
-        _daily["new_today"] += 1
-    else:
-        _daily["review_today"] += 1
-
-    interval_seconds = fsrs.next_interval(s) * 86400
-    return {
-        "word": word,
-        "next_interval_seconds": interval_seconds,
     }
 
 

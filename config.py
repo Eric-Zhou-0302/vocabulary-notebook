@@ -46,7 +46,3 @@ def get_ollama_config() -> dict:
 
 def get_deepseek_config() -> dict:
     return load_config().get("deepseek", {})
-
-
-def get_srs_config() -> dict:
-    return load_config().get("srs", {"daily_new_limit": 20})

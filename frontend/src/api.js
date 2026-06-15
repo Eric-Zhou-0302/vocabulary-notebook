@@ -14,8 +14,8 @@ async function request(url, options = {}) {
   return res
 }
 
-export async function fetchWords({ q = '', date = '', page = 1, size = 20 } = {}) {
-  const params = new URLSearchParams({ q, date, page, size })
+export async function fetchWords({ q = '', date = '', page = 1, size = 20, sort = '', letter = '' } = {}) {
+  const params = new URLSearchParams({ q, date, page, size, sort, letter })
   const res = await request(`/words?${params}`)
   return res.json()
 }
@@ -50,8 +50,8 @@ export async function deleteWord(id) {
   await request(`/words/${id}`, { method: 'DELETE' })
 }
 
-export function exportUrl(format, { q = '', date = '' } = {}) {
-  const params = new URLSearchParams({ format, q, date })
+export function exportUrl(format, { q = '', date = '', sort = '' } = {}) {
+  const params = new URLSearchParams({ format, q, date, sort })
   return `${BASE}/words/export?${params}`
 }
 

@@ -33,6 +33,7 @@ export default function WordNew() {
       setToast({ type: 'info', msg: `「${word.trim()}」已保存` })
       setTimeout(() => setToast(null), 2000)
     } catch (err) {
+      setWord('')
       if (err.status === 409) {
         setToast({ type: 'warn', msg: err.message })
       } else {
@@ -47,7 +48,7 @@ export default function WordNew() {
   function handleKeyDown(e) {
     if (e.key === 'Escape') {
       e.preventDefault()
-      navigate('/')
+      navigate(-1)
     }
   }
 
@@ -71,7 +72,7 @@ export default function WordNew() {
           <button type="submit" className="btn btn-primary" disabled={loading}>
             {loading ? '保存中…' : '保存'}
           </button>
-          <button type="button" className="btn btn-secondary" onClick={() => navigate('/')}>
+          <button type="button" className="btn btn-secondary" onClick={() => navigate(-1)}>
             取消
           </button>
         </div>

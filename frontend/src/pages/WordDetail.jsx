@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { fetchWord, updateWord, deleteWord } from '../api'
 
 export default function WordDetail() {
@@ -35,20 +35,20 @@ export default function WordDetail() {
   async function handleDelete() {
     if (!window.confirm('确认删除这个单词？')) return
     await deleteWord(id)
-    navigate('/')
+    navigate(-1)
   }
 
   if (loading) return <div className="loading">加载中…</div>
   if (error) return (
     <div className="empty-state">
       <p>{error}</p>
-      <Link to="/">返回列表</Link>
+      <button onClick={() => navigate(-1)}>返回列表</button>
     </div>
   )
 
   return (
     <div>
-      <Link to="/" className="btn btn-ghost" style={{ marginBottom: 16 }}>← 返回</Link>
+      <button onClick={() => navigate(-1)} className="btn btn-ghost" style={{ marginBottom: 16 }}>← 返回</button>
 
       <div className="detail-card">
         <div className="detail-word">{word.word}</div>

@@ -6,14 +6,13 @@ import WordCard from '../components/WordCard'
 import ExportMenu from '../components/ExportMenu'
 import EnrichProgress from '../components/EnrichProgress'
 
-export default function WordList({ searchInputRef }) {
+export default function WordList() {
   const [searchParams, setSearchParams] = useSearchParams()
   const pageParam = parseInt(searchParams.get('page') || '1', 10)
 
   const [words, setWords] = useState([])
   const [dates, setDates] = useState([])
-  const [qInput, setQInput] = useState('')
-  const [debouncedQ, setDebouncedQ] = useState('')
+  const [q, setQ] = useState('')
   const [date, setDate] = useState('')
   const [sort, setSort] = useState('')
   const [letter, setLetter] = useState('')
@@ -60,16 +59,10 @@ export default function WordList({ searchInputRef }) {
 
   useEffect(() => { fetchDates().then(d => setDates(d.dates)).catch(() => {}) }, [])
 
-  // 搜索框 debounce 200ms — qInput 即时更新（输入流畅），debouncedQ 延迟更新（驱动 API）
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQ(qInput), 200)
-    return () => clearTimeout(timer)
-  }, [qInput])
-
   useEffect(() => {
     setLoading(true)
     setError('')
-    fetchWords({ q: debouncedQ, date, page, sort, letter })
+    fetchWords({ q, date, page, sort, letter })
       .then(data => {
         setWords(data.words)
         setTotalPages(data.pages)
@@ -77,7 +70,7 @@ export default function WordList({ searchInputRef }) {
       })
       .catch(() => setError('加载失败，请确认后端服务是否运行'))
       .finally(() => setLoading(false))
-  }, [debouncedQ, date, page, sort, letter])
+  }, [q, date, page, sort, letter])
 
   function toggleLetter(l) {
     setLetter(prev => (prev === l ? '' : l))
@@ -135,11 +128,10 @@ export default function WordList({ searchInputRef }) {
       )}
       <div className="toolbar">
         <input
-          ref={searchInputRef}
           type="text"
           placeholder="搜索单词或释义…"
-          value={qInput}
-          onChange={e => { setQInput(e.target.value); setPage(1) }}
+          value={q}
+          onChange={e => { setQ(e.target.value); setPage(1) }}
         />
         <select value={date} onChange={e => { setDate(e.target.value); setPage(1) }}>
           <option value="">全部日期</option>
@@ -164,7 +156,7 @@ export default function WordList({ searchInputRef }) {
         >
           {enriching ? '补全中…' : '补全缺失'}
         </button>
-        <ExportMenu q={debouncedQ} date={date} sort={sort} />
+        <ExportMenu q={q} date={date} sort={sort} />
         <Link to="/word/new" className="btn btn-primary">+ 添加</Link>
       </div>
 
@@ -206,12 +198,12 @@ export default function WordList({ searchInputRef }) {
             <path d="M3336h6M36 33v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
           <p>
-            {debouncedQ || date || letter
+            {q || date || letter
               ? `无匹配单词${letter ? `（首字母 ${letter.toUpperCase()}）` : ''}`
               : '还没有单词'}
           </p>
-          {debouncedQ || date || letter ? (
-            <button className="btn btn-ghost" onClick={() => { setQInput(''); setDebouncedQ(''); setDate(''); setLetter('') }}>
+          {q || date || letter ? (
+            <button className="btn btn-ghost" onClick={() => { setQ(''); setDate(''); setLetter('') }}>
               清除筛选
             </button>
           ) : (
@@ -220,7 +212,7 @@ export default function WordList({ searchInputRef }) {
         </div>
       ) : (
         <>
-          {words.map((w, i) => <WordCard key={w.id} word={w} q={debouncedQ} index={i} />)}
+          {words.map((w, i) => <WordCard key={w.id} word={w} index={i} />)}
           {totalPages > 1 && (
             <div className="pagination">
               <button
