@@ -39,12 +39,49 @@ async def lifespan(app: FastAPI):
     _event_queue = asyncio.Queue()
     _enrich_queue = asyncio.Queue()
     worker_task = asyncio.create_task(_enrich_worker())
+    backup_task = asyncio.create_task(_periodic_backup_loop())
     yield
+    backup_task.cancel()
     worker_task.cancel()
-    try:
-        await worker_task
-    except asyncio.CancelledError:
-        pass
+    for t in (backup_task, worker_task):
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
+
+
+async def _periodic_backup_loop():
+    """每 10 分钟把 words.json 原子复制到 words.json.bak。
+
+    设计意图：这是 T18 期间数据被无痕覆盖的事后兜底 — 万一主文件被误删 / 损坏 /
+    被代码错误重写，备份至少落后 ≤10 分钟。原子写（tmp+rename）保证备份本身不被中途
+    写入中断。空数据跳过（避免把已丢的 0 词状态覆盖掉还能救的旧备份）。
+    """
+    while True:
+        try:
+            await asyncio.sleep(BACKUP_INTERVAL_SECONDS)
+        except asyncio.CancelledError:
+            return
+        try:
+            if not DATA_FILE.exists():
+                continue
+            data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+            if len(data.get("words", [])) < 1:
+                # 跳过空数据，不让"丢失"状态覆盖掉能救的旧备份
+                continue
+            backup = DATA_FILE.with_suffix(".json.bak")
+            tmp = DATA_FILE.with_suffix(".json.bak.tmp")
+            tmp.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            tmp.replace(backup)
+            print(f"  [backup] words.json → words.json.bak ({len(data['words'])} words)")
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            # 备份失败不能拖垮服务
+            print(f"  [backup] failed: {type(e).__name__}: {e}")
 
 
 app = FastAPI(title="Vocabulary Notebook", lifespan=lifespan)
@@ -75,6 +112,11 @@ _ENRICH_COOLDOWN = 300  # 秒
 _enrich_current: Optional[str] = None
 _enrich_batch_total: int = 0
 _enrich_batch_done: int = 0
+
+# ─── 周期备份 ────────────────────────────────────────────
+# 后端运行时每 10 分钟把 words.json 原子复制到 words.json.bak。
+# 万一主文件被误删/损坏/被代码错误重写，备份至少落后 ≤10 分钟。
+BACKUP_INTERVAL_SECONDS = 600  # 10 分钟
 
 
 # ─── PDF 字体路径 (fpdf2 纯 Python，零系统依赖) ──────────
