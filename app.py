@@ -707,13 +707,14 @@ def export_words(
 
     if format == "csv":
         out = io.StringIO()
+        out.write("﻿")  # UTF-8 BOM — Excel 看这个知道是 UTF-8,不会按 GBK 误读
         w = csv.writer(out)
         w.writerow(["单词", "音标", "释义", "例句", "日期"])
         for item in words:
             w.writerow([item["word"], item["phonetic"], item["definition"], item["example"], item["created_at"][:10]])
         out.seek(0)
         return StreamingResponse(
-            iter([out.getvalue()]),
+            iter([out.getvalue().encode("utf-8")]),
             media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition": f"attachment; filename=vocabulary-{today}.csv"},
         )
