@@ -514,6 +514,22 @@ CRITICAL — determine the canonical headword first:
 - "{word}" may only be an adjective — do not add a noun/verb
   sense that doesn't exist (e.g., "intricate" is adj only).
 
+CRITICAL — handle unrecognized words honestly:
+- If "{word}" is a single word not in standard English
+  dictionaries (typo, nonsense, abbreviation you're unsure
+  of), return an empty JSON:
+  {{"phonetic":"", "definition":"", "example":""}}
+  Do NOT fabricate definitions for words you don't recognize.
+- If "{word}" is a multi-word phrase (contains a space), it
+  is a legitimate entry — treat it as a valid headword and
+  return its phrase meaning (e.g., "in advance of", "take
+  no notice of", "bottle stoppers"). Do NOT refuse phrases.
+- For proper nouns, brand names, or technical jargon you're
+  not certain about, also return empty JSON. Better to leave
+  a word empty than to invent a fake meaning.
+- When uncertain about any field, leave that field empty
+  rather than guessing.
+
 Examples:
   "granules"  → headword "granule" (n.)
   "esteemed"  → headword "esteem" (vt. / n.)
@@ -853,14 +869,24 @@ async def _enrich_worker():
     global _enrich_current, _enrich_batch_done
     import logging
     logger = logging.getLogger("uvicorn")
+    logger.warning("[enrich-worker] started")
     while True:
         word_id, word_text = await _enrich_queue.get()
         _enrich_current = word_text
+        logger.warning(f"[enrich-worker] picked: {word_text!r} id={word_id}")
         try:
             phonetic, definition, example = await enrich_word(word_text)
             if not phonetic and not definition and not example:
-                # 失败时清空冷却戳：保留它会让 enrich-missing 端点持续 5 分钟
-                # 拒绝重试，导致单词永远空着。用户主动重试应能立即生效。
+                # 全空响应。词组(空格)静默不打扰 — 可能是 deepseek 对该词组不熟;
+                # 单个词推 toast 提示 — 可能是拼错/不存在/网络失败。
+                logger.warning(f"[enrich] {word_text} — deepseek 返回空")
+                if " " not in word_text and _event_queue is not None:
+                    await _event_queue.put({
+                        "type": "enrich_failed",
+                        "word_id": word_id,
+                        "word": word_text,
+                        "reason": "deepseek 未返回任何内容(可能是错误单词、不存在的词、或网络失败)",
+                    })
                 _enriching_ids.pop(word_id, None)
                 continue
 
@@ -900,6 +926,11 @@ async def _enrich_worker():
                     "definition": definition,
                     "example": example,
                 })
+        except Exception as e:
+            # 外层保护:任何意外异常都不让 worker 死,记录后继续下一个
+            logger.exception(f"[enrich-worker] UNCAUGHT EXCEPTION: {e}")
+            import asyncio as _aio
+            await _aio.sleep(1)
         finally:
             _enrich_current = None
             _enrich_queue.task_done()
@@ -915,11 +946,18 @@ def _enrich_post_check(word: str, phonetic: str, definition: str, example: str) 
     import logging
     logger = logging.getLogger("uvicorn")
 
-    # 1. 拼写 — 拦截 conffin/cublic/fivre/weav/archtophilist/undeter 这类
+    # 1. 拼写 — 拦截 conffin/cublic/fivre/weav/undeter 这类
+    # 词组(空格分隔)按分词查,避免 "bottle stoppers" 整串被误拒
     try:
         import enchant
-        if not enchant.Dict("en_US").check(word):
-            return False, f"word 不在英语词典(疑似拼写错): {word!r}"
+        d = enchant.Dict("en_US")
+        if " " in word:
+            bad = [p for p in word.split() if not d.check(p)]
+            if bad:
+                return False, f"词组中分词拼写错 {bad}: {word!r}"
+        else:
+            if not d.check(word):
+                return False, f"word 不在英语词典(疑似拼写错): {word!r}"
     except ImportError:
         pass  # pyenchant 未装 — 降级跳过
     except Exception as e:
