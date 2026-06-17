@@ -1,15 +1,19 @@
 import { useEffect, useCallback, useRef } from 'react'
 
 /**
- * 订阅后端 SSE 事件流，enriched 事件触发时回调 onEnriched(wordId, data)
- * 连接断开时回调 onDisconnect()
+ * 订阅后端 SSE 事件流
+ * - enriched 事件:onEnriched(wordId, data)
+ * - enrich_failed 事件:onEnrichFailed(wordId, word, reason)
+ * - 连接断开:onDisconnect()
  * 返回 cleanup 函数在组件卸载时断开连接
  */
-export function useSSE({ onEnriched, onDisconnect }) {
+export function useSSE({ onEnriched, onEnrichFailed, onDisconnect }) {
   const onEnrichedRef = useRef(onEnriched)
+  const onEnrichFailedRef = useRef(onEnrichFailed)
   const onDisconnectRef = useRef(onDisconnect)
   useEffect(() => {
     onEnrichedRef.current = onEnriched
+    onEnrichFailedRef.current = onEnrichFailed
     onDisconnectRef.current = onDisconnect
   })
 
@@ -49,6 +53,8 @@ export function useSSE({ onEnriched, onDisconnect }) {
                       definition: event.definition,
                       example: event.example,
                     })
+                  } else if (event.type === 'enrich_failed') {
+                    onEnrichFailedRef.current?.(event.word_id, event.word, event.reason)
                   }
                 } catch {
                   // 忽略解析失败的行

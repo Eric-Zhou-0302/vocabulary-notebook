@@ -84,8 +84,17 @@ export default function WordList() {
     ))
   }, [])
 
+  // SSE: enrich 校验失败 — toast 提示用户
+  const handleEnrichFailed = useCallback((wordId, word, reason) => {
+    // 简化 reason 文本(去掉引号和括号内的细节)
+    const cleanReason = reason.replace(/['"()（）]/g, '').slice(0, 60)
+    setToast(`自动补全失败: ${word} — ${cleanReason}`)
+    setTimeout(() => setToast(''), 5000)
+  }, [])
+
   useSSE({
     onEnriched: handleEnriched,
+    onEnrichFailed: handleEnrichFailed,
     onDisconnect: () => setSseDisconnected(true),
   })
 

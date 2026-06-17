@@ -500,20 +500,36 @@ async def enrich_word(word: str) -> tuple[str, str, str]:
     import logging
     logger = logging.getLogger("uvicorn")
 
-    prompt = (
-        f'For the English word "{word}", provide:\n'
-        f'1. IPA phonetic transcription\n'
-        f'2. Chinese definitions with parts of speech. '
-        f'Use abbreviations: vt. 及物动词, vi. 不及物动词, n. 名词, adj. 形容词, '
-        f'adv. 副词, prep. 介词, conj. 连词, pron. 代词.\n'
-        f'IMPORTANT: synonyms of the same POS belong on ONE line, separated by a Chinese comma (，). '
-        f'Only start a new line when switching to a different POS. '
-        f'Every line MUST begin with a POS abbreviation.\n'
-        f'Example: "n. 标准，规范，准则\\nvt. 使标准化，校准\\nadj. 标准的"\n'
-        f'3. One natural example sentence\n'
-        f'Reply ONLY with a JSON object, no other text:\n'
-        f'{{"phonetic": "/.../", "definition": "n. 释义一，释义二\\nvt. 及物释义", "example": "..."}}'
-    )
+    prompt = f'''For the English word "{word}", provide its dictionary
+headword's phonetic, definition, and an English example.
+
+CRITICAL — determine the canonical headword first:
+- "{word}" may be a plural, past tense, or derived form.
+  Identify the base headword, then return ITS definitions.
+- Exception: if "{word}" is itself an established headword
+  (e.g., standalone noun like "running", "swimming", "meeting",
+  "building", "writing", "cooking", "feeling"), keep it.
+- Do not invent senses for "{word}" that are not in major
+  English dictionaries.
+- "{word}" may only be an adjective — do not add a noun/verb
+  sense that doesn't exist (e.g., "intricate" is adj only).
+
+Examples:
+  "granules"  → headword "granule" (n.)
+  "esteemed"  → headword "esteem" (vt. / n.)
+  "running"   → headword "running" (n.)
+  "amassing"  → headword "amass" (vt.)
+  "converged" → headword "converge" (vi.)
+
+The example sentence MUST be in English (not Chinese), short,
+and illustrate one of the senses above.
+
+Use POS abbreviations: vt. vi. n. adj. adv. prep. conj. pron.
+Synonyms of the same POS belong on ONE line, separated by
+Chinese comma (，). Every line MUST start with a POS abbreviation.
+
+Reply ONLY with a JSON object, no other text:
+{{"phonetic": "/.../", "definition": "n. 释义一，释义二\\nvt. 及物释义", "example": "..."}}'''
     try:
         if config.get_provider() == "ollama":
             ollama_cfg = config.get_ollama_config()
@@ -835,6 +851,8 @@ async def create_word(body: dict):
 async def _enrich_worker():
     """单 worker 从队列串行取任务，逐个调用 Ollama，避免并发排队超时"""
     global _enrich_current, _enrich_batch_done
+    import logging
+    logger = logging.getLogger("uvicorn")
     while True:
         word_id, word_text = await _enrich_queue.get()
         _enrich_current = word_text
@@ -843,6 +861,20 @@ async def _enrich_worker():
             if not phonetic and not definition and not example:
                 # 失败时清空冷却戳：保留它会让 enrich-missing 端点持续 5 分钟
                 # 拒绝重试，导致单词永远空着。用户主动重试应能立即生效。
+                _enriching_ids.pop(word_id, None)
+                continue
+
+            # 后处理校验：拦截拼写错/中文例句/词性误标
+            ok, reason = _enrich_post_check(word_text, phonetic, definition, example)
+            if not ok:
+                logger.warning(f"[enrich-check] {word_text} — 拒绝写回: {reason}")
+                if _event_queue is not None:
+                    await _event_queue.put({
+                        "type": "enrich_failed",
+                        "word_id": word_id,
+                        "word": word_text,
+                        "reason": reason,
+                    })
                 _enriching_ids.pop(word_id, None)
                 continue
 
@@ -871,6 +903,44 @@ async def _enrich_worker():
         finally:
             _enrich_current = None
             _enrich_queue.task_done()
+
+
+def _enrich_post_check(word: str, phonetic: str, definition: str, example: str) -> tuple[bool, str]:
+    """后处理校验 — 返回 (ok, reason)。
+
+    三道闸:拼写(pyenchant) / 例句语种(langdetect) / 释义 POS 行头(纯正则)。
+    任一失败 → 严格模式:不写回,清冷却,推 SSE enrich_failed 事件。
+    库未装时优雅降级(log warning 后跳过该闸)。
+    """
+    import logging
+    logger = logging.getLogger("uvicorn")
+
+    # 1. 拼写 — 拦截 conffin/cublic/fivre/weav/archtophilist/undeter 这类
+    try:
+        import enchant
+        if not enchant.Dict("en_US").check(word):
+            return False, f"word 不在英语词典(疑似拼写错): {word!r}"
+    except ImportError:
+        pass  # pyenchant 未装 — 降级跳过
+    except Exception as e:
+        logger.warning(f"[enrich-check] {word} — 拼写检查异常: {type(e).__name__}: {e}")
+
+    # 2. 例句含中文字符 → 拦截(algebra 中文例句这类)
+    # 不做通用语种检测:langdetect 在 < 10 词的例句上误判率 30%+,
+    # 会把短英文误判为 ro/af/so 等。直接看是否含中文更稳。
+    if example and example.strip() and re.search(r"[一-鿿]", example):
+        return False, f"例句包含中文字符: {example!r}"
+
+    # 3. 释义每行以合法 POS 开头 — 拦截 divergent n. / intricate vt. / 冷门义项
+    POS = {"vt.", "vi.", "n.", "adj.", "adv.", "prep.", "conj.", "pron."}
+    for line in (definition or "").split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        if not any(line.startswith(p) for p in POS):
+            return False, f"释义行不以 POS 开头: {line!r}"
+
+    return True, ""
 
 
 @app.put("/api/words/{word_id}")
