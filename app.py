@@ -3,6 +3,7 @@ import asyncio
 import csv
 import html as html_mod
 import io
+import math
 import json
 import os
 import re
@@ -124,6 +125,340 @@ BACKUP_INTERVAL_SECONDS = 600  # 10 分钟
 _CJK_FONT_PATH = "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"
 if not os.path.exists(_CJK_FONT_PATH):
     _CJK_FONT_PATH = None  # 兜底：中文显示为空白，但不会崩溃
+
+
+# ─── PDF 表格化导出 ─────────────────────────────────────
+
+def _estimate_lines(text: str, col_w_mm: float, font_size_pt: float) -> int:
+    """估算文本在指定列宽（mm）和字号（pt）下需要多少行。
+
+    启发式：CJK 字符 ≈ 1em，全角标点 ≈ 0.85em，
+    ASCII 字母 ≈ 0.5em，数字 / 半角标点 ≈ 0.55em。
+    """
+    if not text:
+        return 0
+    em = font_size_pt * 0.3528  # pt → mm
+    total_lines = 0
+    for para in text.split("\n"):
+        w = 0.0
+        for ch in para:
+            cp = ord(ch)
+            if 0x2E80 <= cp <= 0x303E or 0x3400 <= cp <= 0x9FFF or 0xF900 <= cp <= 0xFAFF:
+                w += em * 1.0  # CJK / 全角
+            elif 0xFF00 <= cp <= 0xFFEF:
+                w += em * 0.85  # 全角标点
+            elif ch.isascii() and ch.isalpha():
+                w += em * 0.50  # Latin
+            else:
+                w += em * 0.55  # 数字 / 半角标点 / 其他
+        total_lines += max(1, math.ceil(w / col_w_mm))
+    return total_lines
+
+
+def _build_pdf(words: list[dict], today: str, use_cjk: bool, cjk_font_path: Optional[str]) -> bytes:
+    """渲染词汇笔记本 PDF：密集表格布局，~20 词/页。
+
+    设计: Scholar's Compact
+    - 顶栏: 标题 + 日期 + 计数 + 双线分割
+    - 表头: 序号 / 单词 + 音标 / 释义 / 例句
+    - 行: 斑马纹（极淡米色），超细分隔线
+    - 字: 单词 Times Bold, 音标 Courier Italic, 释义 Helvetica, 例句 Italic
+    - 底栏: 页码 + 总数
+    """
+
+    # ── 字体注册 ──
+    class _VocabPDF(FPDF):
+        def __init__(self):
+            super().__init__("P", "mm", "A4")
+            self._cjk = use_cjk
+            self._word_count = len(words)
+            if use_cjk:
+                self.add_font("CJK", "", cjk_font_path)
+                self.add_font("CJK", "B", cjk_font_path)
+                self.add_font("CJK", "I", cjk_font_path)
+
+    pdf = _VocabPDF()
+
+    # ── 排版常量 ──
+    M_L, M_R, M_T, M_B = 16, 16, 14, 16
+    pdf.set_margins(M_L, M_T, M_R)
+    pdf.set_auto_page_break(False)  # 手动控制分页
+    pdf.set_left_margin(M_L)
+    pdf.set_right_margin(M_R)
+    pdf.set_top_margin(M_T)
+    pdf.set_auto_page_break(False)
+
+    PAGE_W = pdf.w  # 210
+    CONTENT_W = PAGE_W - M_L - M_R  # 178
+
+    # 列宽（mm）
+    COL_NUM_W = 8
+    COL_WORD_W = 36
+    COL_DEF_W = 86
+    COL_EX_W = CONTENT_W - COL_NUM_W - COL_WORD_W - COL_DEF_W  # 48
+
+    COL_X = {
+        "num": M_L,
+        "word": M_L + COL_NUM_W,
+        "def": M_L + COL_NUM_W + COL_WORD_W,
+        "ex": M_L + COL_NUM_W + COL_WORD_W + COL_DEF_W,
+    }
+
+    # 行高常量
+    LH_DEF = 8.5 * 0.3528 * 1.22  # 8.5pt × 1.22 leading ≈ 3.66mm
+    LH_EX = 7.5 * 0.3528 * 1.22   # 7.5pt × 1.22 leading ≈ 3.23mm
+    ROW_PAD_TOP = 1.6
+    ROW_PAD_BOT = 1.4
+    MIN_ROW_H = 8.8
+
+    # 顶栏 + 表头占用高度
+    HEADER_BAND_H = 11
+    HEADER_RULE_GAP = 1.2
+    COL_HEADER_H = 6.2
+    COL_HEADER_GAP = 1.0
+    TABLE_TOP_OFFSET = HEADER_BAND_H + HEADER_RULE_GAP + COL_HEADER_H + COL_HEADER_GAP
+    TABLE_BOTTOM = pdf.h - M_B  # 281
+
+    # ── 配色 ──
+    C_TITLE = (38, 38, 38)
+    C_META = (120, 116, 108)
+    C_RULE = (180, 172, 156)        # 主分割线
+    C_RULE_LITE = (215, 210, 196)   # 行间细线
+    C_ZEBRA = (247, 243, 232)       # 斑马米色
+    C_NUM = (170, 162, 142)         # 序号灰
+    C_WORD = (20, 20, 20)
+    C_PHON = (130, 130, 130)
+    C_DEF = (60, 60, 60)
+    C_EX = (110, 110, 110)
+    C_HEADER_BG = (50, 46, 40)      # 表头深色背景
+    C_HEADER_FG = (245, 240, 228)
+
+    sans = "CJK" if use_cjk else "Helvetica"
+    serif = "CJK" if use_cjk else "Times"
+    mono = "CJK" if use_cjk else "Courier"
+
+    # ── 头部 ──
+    def draw_header():
+        y = M_T
+        # 标题行
+        pdf.set_xy(M_L, y)
+        pdf.set_font(serif, "B", 14)
+        pdf.set_text_color(*C_TITLE)
+        title = "VOCABULARY NOTEBOOK"
+        pdf.cell(80, 6.5, title)
+        # 副标题（中文）
+        if use_cjk:
+            pdf.set_xy(M_L, y + 6.5)
+            pdf.set_font(sans, "", 8.5)
+            pdf.set_text_color(*C_META)
+            pdf.cell(80, 4, "词 汇 笔 记 本 · 导 出")
+        # 元信息右对齐
+        pdf.set_xy(M_L, y)
+        pdf.set_font(mono, "", 8)
+        pdf.set_text_color(*C_META)
+        meta = f"{today}  ·  {len(words):>4} WORDS"
+        pdf.cell(CONTENT_W, 6.5, meta, align="R")
+        if use_cjk:
+            pdf.set_xy(M_L, y + 6.5)
+            pdf.set_font(sans, "", 7.5)
+            pdf.cell(CONTENT_W, 4, f"导出日期 {today}    共 {len(words)} 个单词", align="R")
+        # 双线分割
+        pdf.set_draw_color(*C_RULE)
+        pdf.set_line_width(0.4)
+        pdf.line(M_L, M_T + HEADER_BAND_H, M_L + CONTENT_W, M_T + HEADER_BAND_H)
+        pdf.set_line_width(0.15)
+        pdf.line(M_L, M_T + HEADER_BAND_H + 1.2, M_L + CONTENT_W, M_T + HEADER_BAND_H + 1.2)
+
+    # ── 表头 ──
+    def draw_col_header(y: float):
+        h = COL_HEADER_H
+        pdf.set_fill_color(*C_HEADER_BG)
+        pdf.rect(M_L, y, CONTENT_W, h, style="F")
+        pdf.set_font(sans if use_cjk else "Helvetica", "B", 8.5)
+        pdf.set_text_color(*C_HEADER_FG)
+        labels = [
+            ("#",       COL_X["num"], COL_NUM_W, "C"),
+            ("WORD",    COL_X["word"], COL_WORD_W, "L"),
+            ("DEFINITION", COL_X["def"], COL_DEF_W, "L"),
+            ("EXAMPLE", COL_X["ex"], COL_EX_W, "L"),
+        ]
+        for txt, x, w, align in labels:
+            pdf.set_xy(x + 2, y + 1.6)
+            pdf.cell(w - 4, h - 1.6, txt, align=align)
+        return y + h
+
+    # ── 表头后 ──
+    def draw_table_separator(y: float):
+        pdf.set_draw_color(*C_RULE_LITE)
+        pdf.set_line_width(0.15)
+        pdf.line(M_L, y, M_L + CONTENT_W, y)
+        return y
+
+    # ── 单行 ──
+    def draw_row(idx: int, item: dict, y: float, zebra: bool):
+        word = html_mod.unescape(item.get("word", "")).strip()
+        phonetic = html_mod.unescape(item.get("phonetic", "")).strip()
+        definition = html_mod.unescape(item.get("definition", "")).strip()
+        example = html_mod.unescape(item.get("example", "")).strip()
+
+        n_def = _estimate_lines(definition, COL_DEF_W - 4, 8.5)
+        n_ex = _estimate_lines(example, COL_EX_W - 4, 7.5)
+        text_h = n_def * LH_DEF + (n_ex * LH_EX + 1.0 if example else 0)
+        row_h = max(MIN_ROW_H, ROW_PAD_TOP + text_h + ROW_PAD_BOT)
+
+        # 斑马背景
+        if zebra:
+            pdf.set_fill_color(*C_ZEBRA)
+            pdf.rect(M_L, y, CONTENT_W, row_h, style="F")
+
+        # 序号（垂直居中）
+        pdf.set_font(serif, "B", 8.5)
+        pdf.set_text_color(*C_NUM)
+        num_h = 4.0
+        pdf.set_xy(COL_X["num"], y + (row_h - num_h) / 2)
+        pdf.cell(COL_NUM_W, num_h, f"{idx:>3}", align="C")
+
+        # 单词
+        pdf.set_xy(COL_X["word"] + 1.5, y + ROW_PAD_TOP)
+        pdf.set_font(serif, "B", 10.5)
+        pdf.set_text_color(*C_WORD)
+        pdf.cell(COL_WORD_W - 3, 4.4, word)
+        # 音标
+        if phonetic:
+            pdf.set_xy(COL_X["word"] + 1.5, y + ROW_PAD_TOP + 4.2)
+            pdf.set_font(mono, "I", 7)
+            pdf.set_text_color(*C_PHON)
+            pdf.cell(COL_WORD_W - 3, 3.2, phonetic)
+
+        # 释义
+        pdf.set_xy(COL_X["def"] + 1.5, y + ROW_PAD_TOP)
+        pdf.set_font(sans, "", 8.5)
+        pdf.set_text_color(*C_DEF)
+        lines_def = _wrap_lines(definition, COL_DEF_W - 3, 8.5)
+        cy = y + ROW_PAD_TOP
+        for ln in lines_def[:max(1, n_def)]:
+            pdf.set_xy(COL_X["def"] + 1.5, cy)
+            pdf.cell(COL_DEF_W - 3, LH_DEF, ln)
+            cy += LH_DEF
+
+        # 例句（缩进 + 斜体）
+        if example and n_ex > 0:
+            cy += 0.5
+            ex_text = f'“{example}”'
+            lines_ex = _wrap_lines(ex_text, COL_EX_W - 3, 7.5)
+            pdf.set_font(sans, "I", 7.5)
+            pdf.set_text_color(*C_EX)
+            for ln in lines_ex[:max(1, n_ex)]:
+                pdf.set_xy(COL_X["ex"] + 1.5, cy)
+                pdf.cell(COL_EX_W - 3, LH_EX, ln)
+                cy += LH_EX
+
+        # 行底分割线
+        pdf.set_draw_color(*C_RULE_LITE)
+        pdf.set_line_width(0.12)
+        pdf.line(M_L, y + row_h, M_L + CONTENT_W, y + row_h)
+        pdf.set_line_width(0.15)
+
+        return y + row_h
+
+    # ── 文本换行（基于宽度估算） ──
+    def _wrap_lines(text: str, max_w_mm: float, font_size_pt: float) -> list[str]:
+        """按列宽把文本切成行。CJK 字符可断，Latin 按词断。"""
+        if not text:
+            return [""]
+        em = font_size_pt * 0.3528
+        out: list[str] = []
+        for para in text.split("\n"):
+            cur = ""
+            cur_w = 0.0
+            # 按字符遍历，CJK 单字断、Latin 按空格切词
+            i = 0
+            tokens: list[str] = []
+            buf = ""
+            for ch in para:
+                cp = ord(ch)
+                if 0x2E80 <= cp <= 0x303E or 0x3400 <= cp <= 0x9FFF or 0xF900 <= cp <= 0xFAFF:
+                    if buf:
+                        tokens.append(buf)
+                        buf = ""
+                    tokens.append(ch)  # CJK 单字 token
+                elif ch == " ":
+                    if buf:
+                        tokens.append(buf)
+                        buf = ""
+                    tokens.append(" ")
+                else:
+                    buf += ch
+            if buf:
+                tokens.append(buf)
+
+            for tk in tokens:
+                w = 0.0
+                for ch in tk:
+                    cp = ord(ch)
+                    if 0x2E80 <= cp <= 0x303E or 0x3400 <= cp <= 0x9FFF or 0xF900 <= cp <= 0xFAFF:
+                        w += em * 1.0
+                    elif 0xFF00 <= cp <= 0xFFEF:
+                        w += em * 0.85
+                    elif ch.isascii() and ch.isalpha():
+                        w += em * 0.5
+                    else:
+                        w += em * 0.55
+                if cur_w + w <= max_w_mm or not cur:
+                    cur += tk
+                    cur_w += w
+                else:
+                    out.append(cur.rstrip())
+                    cur = tk.lstrip() if tk != " " else ""
+                    cur_w = w if tk != " " else 0
+            if cur:
+                out.append(cur.rstrip())
+        return out
+
+    # ── 页脚 ──
+    def draw_footer():
+        pdf.set_xy(M_L, pdf.h - M_B + 4)
+        pdf.set_font(sans if use_cjk else "Helvetica", "", 7.5)
+        pdf.set_text_color(*C_META)
+        left = "Vocab Notebook"
+        right = f"{pdf.page_no()} / {pdf.pages_count}"
+        pdf.cell(CONTENT_W / 2, 4, left)
+        pdf.cell(CONTENT_W / 2, 4, right, align="R")
+        # 细线
+        pdf.set_draw_color(*C_RULE_LITE)
+        pdf.set_line_width(0.15)
+        pdf.line(M_L, pdf.h - M_B + 3, M_L + CONTENT_W, pdf.h - M_B + 3)
+
+    # ── 渲染循环 ──
+    pdf.add_page()
+    draw_header()
+    y = M_T + TABLE_TOP_OFFSET
+    draw_table_separator(y - 0.5)
+    y = draw_col_header(y - 0.5)
+
+    for idx, item in enumerate(words, 1):
+        # 预估算行高，检查是否放得下
+        definition = html_mod.unescape(item.get("definition", ""))
+        example = html_mod.unescape(item.get("example", ""))
+        n_def_est = _estimate_lines(definition, COL_DEF_W - 4, 8.5)
+        n_ex_est = _estimate_lines(example, COL_EX_W - 4, 7.5)
+        text_h_est = n_def_est * LH_DEF + (n_ex_est * LH_EX + 1.0 if example else 0)
+        row_h_est = max(MIN_ROW_H, ROW_PAD_TOP + text_h_est + ROW_PAD_BOT)
+
+        # 放不下则分页
+        if y + row_h_est > TABLE_BOTTOM:
+            draw_footer()
+            pdf.add_page()
+            draw_header()
+            y = M_T + TABLE_TOP_OFFSET
+            draw_table_separator(y - 0.5)
+            y = draw_col_header(y - 0.5)
+
+        y = draw_row(idx, item, y, zebra=(idx % 2 == 0))
+
+    draw_footer()
+
+    return bytes(pdf.output())
 
 
 # RLock 允许同一线程重入，_enrich_in_background 可在锁内 load+save
@@ -353,88 +688,7 @@ def export_words(
 
     if format == "pdf":
         use_cjk = _CJK_FONT_PATH is not None
-
-        # ── 构建 PDF ──────────────────────────────────
-        class _VocabPDF(FPDF):
-            def __init__(self):
-                super().__init__("P", "mm", "A4")
-                self._cjk = use_cjk
-                if use_cjk:
-                    self.add_font("CJK", "", _CJK_FONT_PATH)
-
-            def header(self):
-                fnt = "CJK" if self._cjk else "Helvetica"
-                txt = "词汇笔记本 · 导出" if self._cjk else "Vocabulary Notebook · Export"
-                self.set_font(fnt, "", 9)
-                self.set_text_color(136, 136, 136)
-                self.cell(0, 10, txt, align="C")
-                self.ln(12)
-
-            def footer(self):
-                fnt = "CJK" if self._cjk else "Helvetica"
-                txt = f"第 {self.page_no()} 页" if self._cjk else f"Page {self.page_no()}"
-                self.set_y(-20)
-                self.set_font(fnt, "", 8)
-                self.set_text_color(170, 170, 170)
-                self.cell(0, 10, txt, align="C")
-
-        pdf = _VocabPDF()
-        pdf.set_auto_page_break(True, 22)
-        pdf.set_left_margin(22)
-        pdf.set_right_margin(22)
-        pdf.set_top_margin(22)
-
-        body_font = "CJK" if use_cjk else "Helvetica"
-
-        pdf.add_page()
-
-        # 日期行
-        date_font = "CJK" if use_cjk else "Helvetica"
-        date_text = f"导出日期：{today} · 共 {len(words)} 个单词" if use_cjk else f"Export Date: {today} · {len(words)} words"
-        pdf.set_font(date_font, "", 9)
-        pdf.set_text_color(153, 153, 153)
-        pdf.cell(0, 8, date_text, align="R")
-        pdf.ln(16)
-
-        for item in words:
-            # 检查卡片空间（估算约 45mm）
-            if pdf.get_y() > pdf.h - pdf.b_margin - 45:
-                pdf.add_page()
-
-            # ── 单词 + 音标 ──
-            word_text = html_mod.unescape(item["word"])
-            phonetic = html_mod.unescape(item.get("phonetic", ""))
-            pdf.set_font(body_font, "", 16)
-            pdf.set_text_color(26, 26, 26)
-            pdf.cell(0, 8, word_text)
-            pdf.ln(9)
-            if phonetic:
-                pdf.set_font(body_font, "", 11)
-                pdf.set_text_color(102, 102, 102)
-                pdf.cell(0, 6, phonetic)
-                pdf.ln(8)
-
-            # ── 释义 ──
-            pdf.set_x(pdf.l_margin)
-            pdf.set_font(body_font, "", 12)
-            pdf.set_text_color(51, 51, 51)
-            pdf.multi_cell(0, 7, html_mod.unescape(item["definition"]))
-
-            # ── 例句 ──
-            example = html_mod.unescape(item.get("example", ""))
-            if example:
-                pdf.set_x(pdf.l_margin)
-                pdf.set_font(body_font, "", 11)
-                pdf.set_text_color(85, 85, 85)
-                pdf.multi_cell(0, 6, f'"{example}"')
-
-            # ── 分隔线 ──
-            pdf.set_draw_color(221, 221, 221)
-            y = pdf.get_y() + 2
-            pdf.line(pdf.l_margin, y, pdf.w - pdf.r_margin, y)
-            pdf.set_y(y + 5)
-
-        pdf_bytes = pdf.output()
+        pdf_bytes = _build_pdf(words, today, use_cjk, _CJK_FONT_PATH)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
@@ -587,7 +841,9 @@ async def _enrich_worker():
         try:
             phonetic, definition, example = await enrich_word(word_text)
             if not phonetic and not definition and not example:
-                # 失败保留 _enriching_ids 中的时间戳，冷却期内不会重试
+                # 失败时清空冷却戳：保留它会让 enrich-missing 端点持续 5 分钟
+                # 拒绝重试，导致单词永远空着。用户主动重试应能立即生效。
+                _enriching_ids.pop(word_id, None)
                 continue
 
             with _write_lock:
