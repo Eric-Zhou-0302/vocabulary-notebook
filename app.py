@@ -504,11 +504,28 @@ async def enrich_word(word: str) -> tuple[str, str, str]:
 headword's phonetic, definition, and an English example.
 
 CRITICAL — determine the canonical headword first:
-- "{word}" may be a plural, past tense, or derived form.
-  Identify the base headword, then return ITS definitions.
-- Exception: if "{word}" is itself an established headword
-  (e.g., standalone noun like "running", "swimming", "meeting",
-  "building", "writing", "cooking", "feeling"), keep it.
+- "{word}" may be a plural, past tense, past participle, or
+  present participle. If so, set "word" to the base headword
+  form, but in "definition" describe the ACTUAL INPUT — note
+  the relationship to the base explicitly:
+  - "granules"    → word: "granule",    definition: "n. granule 的复数,颗粒,微粒"
+  - "esteemed"    → word: "esteem",     definition: "vt. esteem 的过去式,受尊敬的,受敬重的"
+  - "converged"   → word: "converge",   definition: "vi. converge 的过去式,会合,聚集,收敛"
+  - "amassing"    → word: "amass",      definition: "vt. amass 的现在分词,积累,正在积聚的"
+  - "coordinated" → word: "coordinate", definition: "vt. coordinate 的过去式/过去分词,协调,协作;adj. 同等的,并列的"
+- Exception: keep "{word}" as the headword when it IS itself
+  an established entry — i.e., it is NOT just a derived form
+  of another word but a standalone word that happens to share
+  a form. Examples:
+  - -ing nouns:  running, swimming, meeting, building, writing,
+    cooking, feeling, offspring, sapling, bowstring, fundraising
+  - -ed/-ing adjectives:  talented, frightening, fascinating,
+    engrossing, compelling, pressing, rugged, alleged, concerted,
+    united, divided, undivided, branded (as adj)
+  - Pluralia tantum / common-plural nouns:  millennia, larvae
+    (when treated as a collective / established plural form)
+  In these cases the input form IS the headword — keep it and
+  provide its own definition.
 - Do not invent senses for "{word}" that are not in major
   English dictionaries.
 - "{word}" may only be an adjective — do not add a noun/verb
