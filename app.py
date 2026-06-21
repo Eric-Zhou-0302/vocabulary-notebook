@@ -513,6 +513,11 @@ CRITICAL — determine the canonical headword first:
   English dictionaries.
 - "{word}" may only be an adjective — do not add a noun/verb
   sense that doesn't exist (e.g., "intricate" is adj only).
+- For homonyms or polysemous words with distinct meanings
+  (e.g., "found" = both "to discover" /faɪnd/ AND
+  "to establish" /faʊnd/), list EVERY distinct meaning with
+  its POS, Chinese translation, and pronunciation. Do not
+  collapse multiple meanings into one or omit any.
 
 CRITICAL — handle unrecognized words honestly:
 - If "{word}" is a single word not in standard English
@@ -540,9 +545,16 @@ Examples:
 The example sentence MUST be in English (not Chinese), short,
 and illustrate one of the senses above.
 
+The definition MUST be written in Chinese (中文), even for
+common English words. English-only definitions are not
+acceptable — translate every sense into Chinese.
+
 Use POS abbreviations: vt. vi. n. adj. adv. prep. conj. pron.
 Synonyms of the same POS belong on ONE line, separated by
 Chinese comma (，). Every line MUST start with a POS abbreviation.
+When listing multiple definitions, put the most common /
+primary meaning first (e.g., "pharmacy" — "药店" comes before
+"药学"; "bank" — "银行" comes before "河岸").
 
 Reply ONLY with a JSON object, no other text:
 {{"phonetic": "/.../", "definition": "n. 释义一，释义二\\nvt. 及物释义", "example": "..."}}'''
