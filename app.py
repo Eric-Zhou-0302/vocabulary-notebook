@@ -520,8 +520,9 @@ CRITICAL — determine the canonical headword first:
   - -ing nouns:  running, swimming, meeting, building, writing,
     cooking, feeling, offspring, sapling, bowstring, fundraising
   - -ed/-ing adjectives:  talented, frightening, fascinating,
-    engrossing, compelling, pressing, rugged, alleged, concerted,
-    united, divided, undivided, branded (as adj)
+    engrossing, compelling, pressing, rugged, alleged, emboldened,
+    esteemed, tired, bored, excited, interested, devoted, retired,
+    concerted, united, divided, undivided, branded (as adj)
   - Pluralia tantum / common-plural nouns:  millennia, larvae
     (when treated as a collective / established plural form)
   In these cases the input form IS the headword — keep it and
