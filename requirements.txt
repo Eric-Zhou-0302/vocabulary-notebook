@@ -1,4 +1,8 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 httpx==0.28.1
+# 给 httpx 加 SOCKS 代理支持。all_proxy=socks5:// 时 httpx 会自动走 SOCKS，
+# 但 socksio 是可选依赖，不装就抛 "Using SOCKS proxy, but the 'socksio' package is not installed"。
+# 等价于 `pip install "httpx[socks]"`，只是把依赖显式写出来。
+socksio==1.0.0
 fpdf2==2.8.4
