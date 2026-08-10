@@ -17,6 +17,7 @@
 | **深色 / 浅色主题** | 暖色调纸感美学——`#1a1817` 深色、`#f5f0e8` 暖色浅色 |
 | **繁体 / 简体** | 界面一键切换繁/简 |
 | **间隔复习（SRS）** | FSRS-4.5 调度，4 档评分，下次间隔预览，新词每日上限 |
+| **全部单词复习** | 沿用翻面卡片浏览全部已补全单词，支持 A–Z / 随机顺序，不改动 SRS |
 
 ## 快速启动
 
@@ -122,9 +123,10 @@ vocabulary-notebook/
 │   │   ├── api.js          # Fetch 封装
 │   │   ├── App.jsx         # 路由 + 布局
 │   │   ├── pages/          # WordList, WordNew, WordDetail, Review
-│   │   ├── components/     # Flashcard, SpellingTest, ExportMenu,
-│   │   │                   # ModelStatus, EnrichProgress, ThemeToggle...
+│   │   ├── components/     # SpacedReview, ExportMenu, ModelStatus,
+│   │   │                   # EnrichProgress, ThemeToggle...
 │   │   ├── useSSE.js       # SSE Hook
+│   │   ├── useDueCount.js  # 待复习数量同步
 │   │   └── useEnrichProgress.js
 │   └── dist/           # 构建产物（gitignored）
 └── CLAUDE.md           # 项目文档
@@ -142,9 +144,24 @@ vocabulary-notebook/
 - **4 档评分**：重来 (1) / 困难 (2) / 良好 (3) / 简单 (4)
 - **键盘**：空格翻面，1-4 评分
 - **下次间隔预览**：每个按钮显示 FSRS 算出的预测间隔（如 "5d" / "2mo"）
-- **新词每日上限**：默认 20/天（可在 `app.py` 顶部 `DAILY_NEW_LIMIT` 调整）
-- **Again 重学**：本 session 内重学一次，同时 `lapses++`
-- 顶部 nav 的 "复习" 链接会显示金色角标 `· N` 提示待复习数（60s 轮询）
+- **新词每日上限**：默认 20/天；在 `config.json` 的 `srs.daily_new_limit` 调整
+- **持久化额度**：今日新学数量从单词的首次复习时间推导，重启服务不会清零
+- **Again 重学**：选择“重来”的卡片回到本轮队尾，同时 `lapses++`
+- **旧数据兼容**：现有单词无需迁移，第一次评分时才写入该词的 `srs` 字段
+- 顶部 nav 的“复习”链接显示金色角标 `· N` 提示待复习数（评分后立即刷新，另有 60 秒轮询）
+
+复习页还提供“全部单词”模式：沿用相同的翻面卡片，可按 A–Z 或随机顺序浏览，
+支持方向键前后切换。该模式不会提交评分、写入 `srs` 或消耗每日新词额度。
+
+配置示例：
+
+```json
+{
+  "srs": {
+    "daily_new_limit": 20
+  }
+}
+```
 
 ## License
 

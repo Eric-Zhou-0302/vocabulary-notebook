@@ -59,3 +59,24 @@ export async function enrichMissing() {
   const res = await request('/words/enrich-missing', { method: 'POST' })
   return res.json()
 }
+
+export async function fetchReviewStats() {
+  const res = await request('/review/stats')
+  return res.json()
+}
+
+export async function fetchReviewDue(limit = 20) {
+  const params = new URLSearchParams({ limit: String(limit) })
+  const res = await request(`/review/due?${params}`)
+  return res.json()
+}
+
+export async function rateWord(wordId, rating) {
+  const res = await request(`/words/${wordId}/review`, {
+    method: 'POST',
+    body: JSON.stringify({ rating }),
+  })
+  const result = await res.json()
+  window.dispatchEvent(new Event('review-stats-changed'))
+  return result
+}

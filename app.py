@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fpdf import FPDF
 
 import config
+import fsrs
 
 # ─── App ──────────────────────────────────────────────────
 
@@ -96,7 +97,8 @@ app.add_middleware(
 
 # ─── Config ───────────────────────────────────────────────
 
-DATA_FILE = Path("words.json")
+# 测试/临时验收可通过环境变量隔离数据；正常启动仍使用项目内 words.json。
+DATA_FILE = Path(os.environ.get("VOCAB_DATA_FILE", "words.json"))
 CHINA_TZ = timezone(timedelta(hours=8))
 STATIC_DIR = Path("frontend/dist")
 
@@ -495,6 +497,99 @@ def now_iso() -> str:
     return datetime.now(CHINA_TZ).isoformat()
 
 
+# ─── 间隔复习辅助 ────────────────────────────────────────
+
+def _parse_review_time(value: str) -> datetime:
+    """解析复习时间；兼容早期可能写入的无时区 ISO 字符串。"""
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=CHINA_TZ)
+    return parsed.astimezone(CHINA_TZ)
+
+
+def _review_due_at(srs_state: dict) -> datetime:
+    """返回卡片到期时间；旧数据没有 due_at 时按 FSRS 状态回算。"""
+    difficulty = float(srs_state["d"])
+    stability = float(srs_state["s"])
+    if not math.isfinite(difficulty) or not 1.0 <= difficulty <= 10.0:
+        raise ValueError("invalid difficulty")
+    if not math.isfinite(stability) or stability <= 0:
+        raise ValueError("invalid stability")
+    last_review = _parse_review_time(srs_state["last_review_at"])
+    if srs_state.get("due_at"):
+        return _parse_review_time(srs_state["due_at"])
+    interval_days = fsrs.next_interval(stability)
+    return last_review + timedelta(days=interval_days)
+
+
+def _new_reviews_today(words: list[dict], now: datetime) -> int:
+    """从持久化的首次复习时间计算今日新学量，服务重启后不会清零。"""
+    today = now.astimezone(CHINA_TZ).date()
+    count = 0
+    for word in words:
+        first_review = (word.get("srs") or {}).get("first_review_at")
+        if first_review:
+            try:
+                if _parse_review_time(first_review).date() == today:
+                    count += 1
+            except (TypeError, ValueError):
+                continue
+    return count
+
+
+def _predicted_intervals(srs_state: Optional[dict], now: datetime) -> dict[str, str]:
+    """预览四档评分对应的下一次复习间隔。"""
+    intervals = {}
+    for rating in (1, 2, 3, 4):
+        if not srs_state:
+            next_stability = fsrs.initial_stability(rating)
+        else:
+            last_review = _parse_review_time(srs_state["last_review_at"])
+            elapsed_days = max((now - last_review).total_seconds() / 86400, 0.0)
+            difficulty = float(srs_state["d"])
+            stability = float(srs_state["s"])
+            retrievability = fsrs.retrievability(elapsed_days, stability)
+            if rating == 1:
+                next_stability = fsrs.next_forget_stability(
+                    difficulty, stability, retrievability
+                )
+            else:
+                next_stability = fsrs.next_recall_stability(
+                    difficulty, stability, retrievability, rating
+                )
+        seconds = fsrs.next_interval(next_stability) * 86400
+        intervals[str(rating)] = fsrs.format_interval(seconds)
+    return intervals
+
+
+def _review_stats_for(words: list[dict], now: datetime, daily_new_limit: int) -> dict:
+    """计算当前复习统计；损坏的 SRS 状态不应拖垮整个列表。"""
+    reviewable = [word for word in words if word.get("definition", "").strip()]
+    new_words = [word for word in reviewable if not word.get("srs")]
+    due_reviews = []
+    invalid_count = 0
+    for word in reviewable:
+        if not word.get("srs"):
+            continue
+        try:
+            if _review_due_at(word["srs"]) <= now:
+                due_reviews.append(word)
+        except (KeyError, TypeError, ValueError):
+            invalid_count += 1
+
+    new_today = _new_reviews_today(reviewable, now)
+    new_quota = max(0, daily_new_limit - new_today)
+    return {
+        "total": len(reviewable),
+        "due_today": len(due_reviews) + min(len(new_words), new_quota),
+        "new_remaining": len(new_words),
+        "review_due": len(due_reviews),
+        "new_today": new_today,
+        "daily_new_limit": daily_new_limit,
+        "invalid_count": invalid_count,
+    }
+
+
 async def enrich_word(word: str) -> tuple[str, str, str]:
     """调用配置好的 Provider 补充音标、释义和例句，返回 (phonetic, definition, example)。失败返回空串。"""
     import logging
@@ -720,6 +815,126 @@ def list_dates():
         if "created_at" in w
     }, reverse=True)
     return {"dates": dates}
+
+
+# ─── API: 间隔复习 ────────────────────────────────────────
+
+@app.get("/api/review/stats")
+def review_stats():
+    """返回导航角标和复习页需要的轻量统计。"""
+    now = datetime.now(CHINA_TZ)
+    daily_new_limit = config.get_srs_config()["daily_new_limit"]
+    return _review_stats_for(load_words()["words"], now, daily_new_limit)
+
+
+@app.get("/api/review/due")
+def review_due(limit: int = Query(default=20, ge=1, le=100)):
+    """返回一批到期卡片：逾期复习优先，再用新词填满剩余额度。"""
+    now = datetime.now(CHINA_TZ)
+    daily_new_limit = config.get_srs_config()["daily_new_limit"]
+    words = [
+        word for word in load_words()["words"]
+        if word.get("definition", "").strip()
+    ]
+    stats = _review_stats_for(words, now, daily_new_limit)
+
+    due_reviews = []
+    for word in words:
+        if not word.get("srs"):
+            continue
+        try:
+            due_at = _review_due_at(word["srs"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if due_at <= now:
+            due_reviews.append((word, due_at))
+    due_reviews.sort(key=lambda item: item[1])
+
+    review_take = [word for word, _ in due_reviews[:limit]]
+    remaining_slots = limit - len(review_take)
+    new_quota = max(0, daily_new_limit - stats["new_today"])
+    new_words = sorted(
+        (word for word in words if not word.get("srs")),
+        key=lambda word: word.get("created_at", ""),
+    )
+    new_take = new_words[:min(remaining_slots, new_quota)]
+
+    cards = []
+    for word in review_take + new_take:
+        cards.append({
+            **word,
+            "is_new": not bool(word.get("srs")),
+            "predicted_intervals": _predicted_intervals(word.get("srs"), now),
+        })
+    return {"cards": cards, "stats": stats}
+
+
+@app.post("/api/words/{word_id}/review")
+def post_review(word_id: str, body: dict):
+    """记录一次评分并原子更新该单词的 FSRS 状态。"""
+    rating = body.get("rating")
+    if type(rating) is not int or rating not in (1, 2, 3, 4):
+        raise HTTPException(status_code=422, detail="rating 必须是 1、2、3 或 4")
+
+    now = datetime.now(CHINA_TZ)
+    with _write_lock:
+        data = load_words()
+        word = next((item for item in data["words"] if item["id"] == word_id), None)
+        if word is None:
+            raise HTTPException(status_code=404, detail="单词不存在")
+        if not word.get("definition", "").strip():
+            raise HTTPException(status_code=409, detail="缺少释义的单词暂不能复习")
+
+        previous = word.get("srs")
+        if previous:
+            try:
+                last_review = _parse_review_time(previous["last_review_at"])
+                elapsed_days = max((now - last_review).total_seconds() / 86400, 0.0)
+                difficulty, stability = fsrs.update(
+                    float(previous["d"]),
+                    float(previous["s"]),
+                    rating,
+                    elapsed_days,
+                )
+                first_review_at = previous.get(
+                    "first_review_at", previous["last_review_at"]
+                )
+                reps = int(previous.get("reps", 0)) + 1
+                lapses = int(previous.get("lapses", 0)) + (1 if rating == 1 else 0)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise HTTPException(status_code=409, detail="该单词的复习状态已损坏") from exc
+        else:
+            difficulty = fsrs.initial_difficulty(rating)
+            stability = fsrs.initial_stability(rating)
+            first_review_at = now.isoformat()
+            reps = 1
+            lapses = 1 if rating == 1 else 0
+
+        interval_days = fsrs.next_interval(stability)
+        due_at = now + timedelta(days=interval_days)
+        word["srs"] = {
+            "d": difficulty,
+            "s": stability,
+            "first_review_at": first_review_at,
+            "last_review_at": now.isoformat(),
+            "due_at": due_at.isoformat(),
+            "reps": reps,
+            "lapses": lapses,
+        }
+        save_words(data)
+
+    card = {
+        **word,
+        "is_new": False,
+        "predicted_intervals": _predicted_intervals(word["srs"], now),
+    }
+    interval_seconds = interval_days * 86400
+    return {
+        "word": word,
+        "card": card,
+        "next_interval_seconds": interval_seconds,
+        "next_interval": fsrs.format_interval(interval_seconds),
+    }
 
 
 # 注意：/api/words/export 和 /api/words/enrich-missing 路由必须在

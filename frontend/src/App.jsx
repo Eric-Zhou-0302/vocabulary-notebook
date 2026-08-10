@@ -3,13 +3,16 @@ import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import WordList from './pages/WordList'
 import WordNew from './pages/WordNew'
 import WordDetail from './pages/WordDetail'
+import Review from './pages/Review'
 import ThemeToggle from './components/ThemeToggle'
 import ModelStatus from './components/ModelStatus'
 import { useGlobalShortcuts } from './useGlobalShortcuts'
+import { useDueCount } from './useDueCount'
 import HelpModal from './components/HelpModal'
 
 export default function App() {
   const location = useLocation()
+  const dueCount = useDueCount()
   const searchInputRef = useRef(null)
   const [helpOpen, setHelpOpen] = useState(false)
   const toggleHelp = useCallback(() => setHelpOpen(o => !o), [])
@@ -29,6 +32,9 @@ export default function App() {
           <Link to="/" className={location.pathname === '/' ? 'active' : ''}>
             单词列表
           </Link>
+          <Link to="/review" className={location.pathname === '/review' ? 'active' : ''}>
+            复习 {dueCount > 0 && <span className="nav-badge">· {dueCount}</span>}
+          </Link>
           <Link to="/word/new" className={location.pathname === '/word/new' ? 'active' : ''}>
             添加单词
           </Link>
@@ -40,6 +46,7 @@ export default function App() {
           <Route path="/" element={<WordList searchInputRef={searchInputRef} />} />
           <Route path="/word/new" element={<WordNew />} />
           <Route path="/word/:id" element={<WordDetail />} />
+          <Route path="/review" element={<Review />} />
         </Routes>
       </main>
       <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />

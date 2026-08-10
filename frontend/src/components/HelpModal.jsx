@@ -38,7 +38,9 @@ export default function HelpModal({ open, onClose }) {
             </li>
           ))}
         </ul>
-        <p className="help-modal-hint">复习模式的空格 / 1-4 见间隔复习 tab</p>
+        <p className="help-modal-hint">
+          今日复习：空格翻面，数字 1–4 评分；全部单词：← → 切换
+        </p>
       </div>
     </div>
   )

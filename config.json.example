@@ -7,5 +7,8 @@
   "deepseek": {
     "api_key": "",
     "model": ""
+  },
+  "srs": {
+    "daily_new_limit": 20
   }
 }

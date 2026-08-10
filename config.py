@@ -46,3 +46,14 @@ def get_ollama_config() -> dict:
 
 def get_deepseek_config() -> dict:
     return load_config().get("deepseek", {})
+
+
+def get_srs_config() -> dict:
+    """返回间隔复习配置，并为旧版 config.json 提供安全默认值。"""
+    srs = load_config().get("srs", {})
+    daily_new_limit = srs.get("daily_new_limit", 20)
+    if not isinstance(daily_new_limit, int) or isinstance(daily_new_limit, bool):
+        raise RuntimeError("srs.daily_new_limit 必须是整数")
+    if not 0 <= daily_new_limit <= 100:
+        raise RuntimeError("srs.daily_new_limit 必须在 0 到 100 之间")
+    return {"daily_new_limit": daily_new_limit}
