@@ -1,48 +1,136 @@
-# 词汇笔记本
+<div align="center">
+  <h1>📖 Vocabulary Notebook</h1>
+  <p><strong>把单词记下来，也真正记住它。</strong></p>
+  <p>
+    一个本地优先的 AI 词汇笔记本。写下单词，自动补全音标、释义与例句，
+    <br />
+    再用 FSRS 间隔复习，把“见过”变成“记得”。
+  </p>
+  <p>
+    <a href="https://github.com/Eric-Zhou-0302/vocabulary-notebook">
+      <img alt="Local-first" src="https://img.shields.io/badge/Local--first-Your_Data-9b7137?style=for-the-badge&labelColor=292522" />
+    </a>
+    <a href="https://fastapi.tiangolo.com/">
+      <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&labelColor=292522" />
+    </a>
+    <a href="https://react.dev/">
+      <img alt="React" src="https://img.shields.io/badge/React-Frontend-61dafb?style=for-the-badge&labelColor=292522" />
+    </a>
+    <a href="https://opensource.org/licenses/MIT">
+      <img alt="License" src="https://img.shields.io/badge/License-MIT-8b5cf6?style=for-the-badge&labelColor=292522" />
+    </a>
+  </p>
+</div>
 
-> 你的第二大脑 — 完全本地运行，无云依赖，无隐私泄露
+<p align="center">
+  <img
+    src="assets/vocabulary-notebook-cover.jpg"
+    alt="Vocabulary Notebook — 本地优先的 AI 词汇笔记本"
+    width="960"
+  />
+</p>
 
-一个本地优先的词汇笔记本，用你自己的 LLM（Ollama 或 DeepSeek）自动补全每个单词的 IPA 音标、中文释义和例句。数据存在你自己的机器上，零云依赖。
+---
 
-## 功能
+## 它做什么
 
-| 功能 | 说明 |
+很多单词软件让你记住一个账号，却不一定让你记住单词。
+
+Vocabulary Notebook 把词库留在本地：添加一个单词后，Ollama 或 DeepSeek 会在后台补全 IPA 音标、中文释义和例句；学完之后，FSRS 根据你的真实记忆状态安排下一次复习。
+
+| 能力 | 体验 |
 |---|---|
-| **AI 自动补全** | 添加单词 → LLM 后台自动填充音标、释义、例句 |
-| **实时 SSE 推送** | 补全进度通过 Server-Sent Events 推送到 UI，无需轮询或刷新 |
-| **闪卡模式** | 随机顺序 + 翻转 + 自我评分（← 忘了 / → 记住了），键盘驱动 |
-| **拼写测试** | 回忆型练习——输入拼写，而非识别选项 |
-| **PDF / CSV / JSON 导出** | 可打印 PDF（含 CJK 字体，零系统依赖）、CSV、JSON 备份 |
-| **多 Provider** | 通过 `config.json` 在 Ollama（本地免费）和 DeepSeek（云端）间切换 |
-| **深色 / 浅色主题** | 暖色调纸感美学——`#1a1817` 深色、`#f5f0e8` 暖色浅色 |
-| **繁体 / 简体** | 界面一键切换繁/简 |
-| **间隔复习（SRS）** | FSRS-4.5 调度，4 档评分，下次间隔预览，新词每日上限 |
-| **全部单词复习** | 沿用翻面卡片浏览全部已补全单词，支持 A–Z / 随机顺序，不改动 SRS |
+| **AI 自动补全** | 只输入单词，后台生成音标、中文释义和自然例句 |
+| **实时进度** | SSE 推送补全过程，不用轮询，也不用手动刷新 |
+| **每日复习** | FSRS-4.5 调度，按“重来 / 困难 / 良好 / 简单”调整间隔 |
+| **全部单词** | 按 A–Z 或随机顺序翻卡，不改动复习进度 |
+| **主动回忆** | 闪卡和拼写测试并存，不只做选择题式识别 |
+| **随时带走** | 一键导出 PDF、CSV 或 JSON，数据不被平台锁住 |
+| **舒服耐看** | 深色 / 浅色主题，简体 / 繁体切换，完整键盘操作 |
 
-## 快速启动
+---
+
+## 快速开始
+
+### 1. 获取项目
 
 ```bash
-# 1. 克隆
 git clone https://github.com/Eric-Zhou-0302/vocabulary-notebook.git
 cd vocabulary-notebook
-
-# 2. 后端
-pip install -r requirements.txt
-cp config.json.example config.json
-
-# 3. 前端
-cd frontend && npm install && npm run build && cd ..
-
-# 4. 启动
-python app.py
-# → 访问 http://localhost:1400
 ```
 
-## 配置 LLM Provider
+### 2. 安装后端依赖
 
-编辑 `config.json`，支持两种 Provider：
+使用项目独立虚拟环境，避免污染系统 Python：
 
-### Ollama（本地，免费）
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp config.json.example config.json
+```
+
+### 3. 构建前端
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
+### 4. 启动
+
+```bash
+python app.py
+```
+
+打开 [http://localhost:1400](http://localhost:1400)，你的词库就在那里。
+
+> 正在开发？运行 `./start.sh`，它会同时启动 FastAPI 热重载服务和 Vite 开发服务器。前端地址为 [http://localhost:5173](http://localhost:5173)。
+
+---
+
+## 使用
+
+### 写下一个单词
+
+点击“添加单词”，输入拼写即可。应用会立即保存记录，并把 AI 补全任务放到后台；音标、释义和例句生成后会实时出现在页面上。
+
+### 每天复习
+
+进入“复习”页，先回忆，再翻面：
+
+| 按键 | 操作 |
+|---|---|
+| `Space` / `Enter` | 翻开当前卡片 |
+| `1` | 重来 |
+| `2` | 困难 |
+| `3` | 良好 |
+| `4` | 简单 |
+| `←` / `→` | 在“全部单词”模式切换卡片 |
+
+每次评分都会更新该词的难度、稳定性和下次复习时间。选择“重来”的卡片会回到本轮队尾，不会偷偷溜走。
+
+### 回看整本词库
+
+切换到“全部单词”，可以按 A–Z 浏览，也可以洗牌随机复习。这个模式只读，不提交评分、不消耗每日新词额度，也不会改变 SRS 状态。
+
+### 导出
+
+当前筛选结果可以导出为：
+
+- **PDF**：适合打印和离线阅读，内置 CJK 字体支持
+- **CSV**：适合 Excel、Numbers 或进一步分析
+- **JSON**：完整备份，方便迁移与二次开发
+
+---
+
+## 选择你的 AI
+
+编辑根目录下的 `config.json`。词库始终保存在本地；只有选择云端 Provider 时，待补全的单词内容才会发送给对应服务。
+
+### Ollama：本地运行
 
 ```json
 {
@@ -54,106 +142,53 @@ python app.py
 }
 ```
 
-1. 确保 Ollama 运行中：`ollama serve`（或系统已自启动）
-2. 下载并运行模型：`ollama run gemma4:26b`（支持任意模型，换模型后同步修改 `config.json` 中的 `model` 字段）
-3. 验证连接：`curl http://localhost:11434/api/tags`（返回模型列表即正常）
+启动模型后即可使用：
 
-### DeepSeek（云端，按量付费）
+```bash
+ollama serve
+ollama run gemma4:26b
+```
+
+模型名称可以替换；修改后同步更新 `config.json` 中的 `model`。
+
+### DeepSeek：云端调用
 
 ```json
 {
   "provider": "deepseek",
   "deepseek": {
-    "api_key": "sk-你的key",
+    "api_key": "sk-你的-key",
     "model": "deepseek-chat"
   }
 }
 ```
 
-从 [DeepSeek API Keys](https://platform.deepseek.com/api_keys) 获取 key。
+API Key 可在 [DeepSeek 开放平台](https://platform.deepseek.com/api_keys)创建。不要提交真实的 `config.json`。
 
-## 系统架构
+---
 
-```
-┌─────────────────────────────────────────────────────┐
-│  React SPA (frontend/dist)                         │
-│  ┌─────────┐  ┌──────────┐  ┌────────────────────┐ │
-│  │WordList │  │  Review  │  │  WordDetail        │ │
-│  └────┬────┘  └────┬─────┘  └─────────┬──────────┘ │
-└───────┼────────────┼───────────────────┼────────────┘
-        │            │                    │
-        └────────────┴────────┬───────────┘
-                             │ REST + SSE
-        ┌────────────────────▼───────────┐
-        │     FastAPI (app.py :1400)     │
-        │  ┌─────────────────────────┐   │
-        │  │  SSE Event Bus          │   │
-        │  │  (asyncio.Queue + Worker)│  │
-        │  └───────────┬─────────────┘   │
-        │              │                │
-        │  ┌───────────▼──────────┐     │
-        │  │  Ollama / DeepSeek    │     │
-        │  │  enrich_word()        │     │
-        │  └───────────────────────┘     │
-        └───────────────────────────────┘
-                             │
-        ┌────────────────────▼───────────┐
-        │        words.json              │
-        └───────────────────────────────┘
+## 复习机制
+
+每日复习使用 FSRS-4.5，根据每个单词的难度（Difficulty）与记忆稳定性（Stability）估算遗忘概率，并动态安排下一次出现的时间。
+
+```text
+添加单词
+   │
+   ├── AI 补全音标、释义、例句
+   │
+   ▼
+首次复习 ──评分──> 更新记忆状态 ──> 计算下次到期时间
+   ▲                                      │
+   └──────────────── 到期后重新进入队列 ──┘
 ```
 
-## 技术栈
+- 默认每天引入 20 个新词
+- 评分按钮会预览预计的下次间隔
+- 新词额度由首次复习时间推导，重启服务不会清零
+- 旧词无需迁移，第一次评分时才写入 `srs` 字段
+- 顶部“复习”角标会显示当前待复习数量
 
-- **后端**：FastAPI，fpdf2（纯 Python PDF，零系统字体依赖），SSE，threading.RLock 原子写入
-- **前端**：React 18，React Router v6，Vite 6，纯 CSS（无 Tailwind，无 UI 库）
-- **LLM**：Ollama（本地）或 DeepSeek（云端），通过 `config.json` 配置
-- **数据**：单个 JSON 文件，`.tmp` 原子交换写入，损坏时自动备份
-
-## 项目结构
-
-```
-vocabulary-notebook/
-├── app.py              # FastAPI 后端 + 所有 API 路由
-├── config.py           # Provider 配置加载器
-├── config.json.example # 配置模板
-├── requirements.txt    # Python 依赖
-├── words.json          # 数据存储（已被 .gitignore 排除）
-├── frontend/
-│   ├── src/
-│   │   ├── api.js          # Fetch 封装
-│   │   ├── App.jsx         # 路由 + 布局
-│   │   ├── pages/          # WordList, WordNew, WordDetail, Review
-│   │   ├── components/     # SpacedReview, ExportMenu, ModelStatus,
-│   │   │                   # EnrichProgress, ThemeToggle...
-│   │   ├── useSSE.js       # SSE Hook
-│   │   ├── useDueCount.js  # 待复习数量同步
-│   │   └── useEnrichProgress.js
-│   └── dist/           # 构建产物（gitignored）
-└── CLAUDE.md           # 项目文档
-```
-
-## 为什么做这个？
-
-市面上的背单词工具大多需要联网、数据存在别人服务器上、AI 补全需要付费 API。
-
-这个工具：**数据归你，模型归你，运行也在你本地。**
-
-## 间隔复习（SRS）
-
-复习 tab 用 FSRS-4.5 算法做间隔重复调度：
-- **4 档评分**：重来 (1) / 困难 (2) / 良好 (3) / 简单 (4)
-- **键盘**：空格翻面，1-4 评分
-- **下次间隔预览**：每个按钮显示 FSRS 算出的预测间隔（如 "5d" / "2mo"）
-- **新词每日上限**：默认 20/天；在 `config.json` 的 `srs.daily_new_limit` 调整
-- **持久化额度**：今日新学数量从单词的首次复习时间推导，重启服务不会清零
-- **Again 重学**：选择“重来”的卡片回到本轮队尾，同时 `lapses++`
-- **旧数据兼容**：现有单词无需迁移，第一次评分时才写入该词的 `srs` 字段
-- 顶部 nav 的“复习”链接显示金色角标 `· N` 提示待复习数（评分后立即刷新，另有 60 秒轮询）
-
-复习页还提供“全部单词”模式：沿用相同的翻面卡片，可按 A–Z 或随机顺序浏览，
-支持方向键前后切换。该模式不会提交评分、写入 `srs` 或消耗每日新词额度。
-
-配置示例：
+调整每日新词上限：
 
 ```json
 {
@@ -163,6 +198,78 @@ vocabulary-notebook/
 }
 ```
 
+---
+
+## 工作流
+
+```text
+┌─────────────────┐       REST + SSE       ┌──────────────────────┐
+│ React + Vite UI │ ◄────────────────────► │ FastAPI · port 1400  │
+└─────────────────┘                         └──────────┬───────────┘
+                                                     │
+                              ┌──────────────────────┼──────────────────┐
+                              ▼                      ▼                  ▼
+                        words.json          Ollama / DeepSeek       FSRS-4.5
+                       本地原子写入           AI 内容补全           复习调度
+```
+
+后端会用锁保护读写，并通过临时文件原子替换 `words.json`；检测到数据损坏时会保留备份。前端构建产物由 FastAPI 直接托管，因此部署时不需要额外的 Web 服务。
+
+---
+
+## 项目结构
+
+```text
+vocabulary-notebook/
+├── app.py                 # FastAPI 应用、API、SSE 与静态文件托管
+├── config.py              # Provider 与 SRS 配置
+├── fsrs.py                # FSRS-4.5 调度算法
+├── words.json             # 本地词库，已被 Git 忽略
+├── templates/             # PDF 导出模板
+├── tests/                 # 后端、提示词与复习测试
+└── frontend/
+    ├── src/
+    │   ├── pages/         # 单词列表、详情、新建、复习
+    │   ├── components/    # 闪卡、导出、模型状态等组件
+    │   └── api.js         # 前端 API 封装
+    └── dist/              # 生产构建产物
+```
+
+---
+
+## 开发与验证
+
+启动前后端开发服务：
+
+```bash
+./start.sh
+```
+
+运行后端测试：
+
+```bash
+./.venv/bin/pytest -q
+```
+
+前端代码修改后必须重新构建，FastAPI 才能托管最新版本：
+
+```bash
+cd frontend && npm run build
+```
+
+---
+
+## 数据与隐私
+
+- 单词、复习状态和历史记录只写入本机 `words.json`
+- `words.json` 与真实 `config.json` 均不会进入 Git
+- Ollama 模式可以完全本地运行
+- DeepSeek 模式会把补全请求发送到 DeepSeek API，请按自己的隐私要求选择
+
+你的词库不是平台的人质。它只是一个你随时能打开、备份和带走的 JSON 文件。
+
+---
+
 ## License
 
-MIT
+[MIT](https://opensource.org/licenses/MIT) © 2026 [Eric Zhou](https://ericzhou.net/)
