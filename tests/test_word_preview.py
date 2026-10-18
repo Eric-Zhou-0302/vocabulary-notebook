@@ -73,15 +73,16 @@ def test_manual_definition_is_immediately_available_and_existing_words_stay_comp
     assert app.get_word("legacy")["enrichment"]["status"] == "idle"
 
 
-def test_duplicate_returns_original_content_and_progress_without_writes_or_ai(isolated, monkeypatch):
-    existing = word("legacy", "2026-10-18T10:00:00+08:00", word="Contract", phonetic="/test/",
+@pytest.mark.parametrize("spelling", ["Contract", "contract", "iPhone"])
+def test_duplicate_returns_original_content_and_progress_without_writes_or_ai(isolated, monkeypatch, spelling):
+    existing = word("legacy", "2026-10-18T10:00:00+08:00", word=spelling, phonetic="/test/",
                     srs={"d": 5.0, "s": 10.0, "reps": 3, "lapses": 1})
     app.save_words({"words": [existing]})
     original = isolated.read_bytes()
     async def unexpected(*args):
         pytest.fail("An existing word must not trigger AI enrichment")
     monkeypatch.setattr(app, "_enqueue_enrich_batch", unexpected)
-    result = TestClient(app.app).post("/api/words", json={"word": "  contract  ", "definition": "Do not overwrite"})
+    result = TestClient(app.app).post("/api/words", json={"word": "  " + spelling.swapcase() + "  ", "definition": "Do not overwrite"})
     assert result.status_code == 409
     assert result.json()["detail"]["word"] == existing
     assert result.json()["detail"]["enrichment"]["status"] == "ready"
@@ -103,9 +104,10 @@ def test_duplicate_returns_current_pending_or_failure_state_without_retry(isolat
 
 
 @pytest.mark.parametrize(("entered", "stored"), [
-    ("  Contract  ", "contract"), ("Contract law", "contract law"),
-    ("API", "API"), ("I", "I"), ("iPhone", "iPhone"),
-    ("McDonald", "McDonald"), ("DNA-binding", "DNA-binding"), ("contract", "contract"),
+    ("  contract  ", "Contract"), ("contract law", "Contract law"),
+    ("API", "API"), ("I", "I"), ("iPhone", "IPhone"),
+    ("McDonald", "McDonald"), ("DNA-binding", "DNA-binding"), ("Contract", "Contract"),
+    ("i", "I"), ("eBay", "EBay"),
 ])
 def test_initial_normalization_is_applied_before_persistence_and_enrichment(isolated, monkeypatch, entered, stored):
     monkeypatch.setattr(app, "_enrich_queue", asyncio.Queue())
