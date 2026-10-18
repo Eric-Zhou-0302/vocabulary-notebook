@@ -1,9 +1,14 @@
 """配置加载与校验"""
 import json
+import copy
+import os
+import tempfile
+import threading
 from pathlib import Path
 
 CONFIG_FILE = Path("config.json")
 _CONFIG: dict = {}
+_CONFIG_LOCK = threading.RLock()
 
 
 def load_config() -> dict:
@@ -66,3 +71,36 @@ def get_sync_config() -> dict:
         raise RuntimeError("sync.interval_seconds 必须是 10 到 3600 之间的整数")
     return {"interval_seconds": interval,
             "credentials_dir": sync.get("credentials_dir", ".secrets")}
+
+
+def public_config() -> dict:
+    data = copy.deepcopy(load_config())
+    ds = data.setdefault("deepseek", {})
+    ds["api_key_configured"] = bool(ds.pop("api_key", ""))
+    return {key: data.get(key, {}) for key in ("provider", "ollama", "deepseek")}
+
+
+def save_model_config(provider, ollama, deepseek) -> dict:
+    """原子落盘成功后才替换内存配置，保留其他业务设置。"""
+    global _CONFIG
+    with _CONFIG_LOCK:
+        data = copy.deepcopy(load_config())
+        ds = {**data.get("deepseek", {}), **deepseek}
+        if not deepseek.get("api_key"):
+            ds["api_key"] = data.get("deepseek", {}).get("api_key", "")
+        if provider == "deepseek" and (not ds.get("api_key") or not ds.get("model")):
+            raise ValueError("请填写 DeepSeek API Key 并选择模型")
+        if provider == "ollama" and (not ollama.get("url") or not ollama.get("model")):
+            raise ValueError("请填写 Ollama 地址和模型名称")
+        data.update(provider=provider, ollama=ollama, deepseek=ds)
+        fd, name = tempfile.mkstemp(dir=CONFIG_FILE.resolve().parent, prefix=".config-")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                f.write("\n")
+            os.replace(name, CONFIG_FILE)
+        finally:
+            if os.path.exists(name):
+                os.unlink(name)
+        _CONFIG = data
+        return public_config()

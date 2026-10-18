@@ -6,6 +6,7 @@ import WordDetail from './pages/WordDetail'
 import Review from './pages/Review'
 import ThemeToggle from './components/ThemeToggle'
 import ModelStatus from './components/ModelStatus'
+import ModelSettings from './pages/ModelSettings'
 import { useGlobalShortcuts } from './useGlobalShortcuts'
 import { useDueCount } from './useDueCount'
 import HelpModal from './components/HelpModal'
@@ -48,16 +49,18 @@ export default function App() {
           <Link to="/word/new" className={location.pathname === '/word/new' ? 'active' : ''}>
             添加单词
           </Link>
+          <Link to="/model-settings" className={location.pathname === '/model-settings' ? 'active' : ''}>模型设置</Link>
           <ThemeToggle />
         </nav>
       </header>
       <CloudStatus />
       <BookPicker />
       <main className="app-main">
-        <Routes key={location.pathname === '/settings' ? 'settings' : location.pathname === '/word/new' ? `add:${active}` : location.pathname.startsWith('/word/') ? location.pathname : `${active}:${cloudVersion}`}>
+        <Routes key={['/settings', '/model-settings'].includes(location.pathname) ? location.pathname : location.pathname === '/word/new' ? `add:${active}` : location.pathname.startsWith('/word/') ? location.pathname : `${active}:${cloudVersion}`}>
           <Route path="/" element={<WordList searchInputRef={searchInputRef} />} />
           <Route path="/word/new" element={<WordNew />} />
           <Route path="/word/:id" element={<WordDetail />} />
+          <Route path="/model-settings" element={<ModelSettings />} />
           <Route path="/review" element={<Review />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>

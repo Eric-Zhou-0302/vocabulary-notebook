@@ -40,6 +40,7 @@ Vocabulary Notebook 把词库留在本地：添加一个单词后，Ollama 或 D
 
 | 能力 | 体验 |
 |---|---|
+| **模型设置** | 网页切换 Ollama / DeepSeek，自动获取 DeepSeek 可用模型并提醒失效配置 |
 | **AI 自动补全** | 只输入单词，后台生成音标、中文释义和自然例句 |
 | **实时进度** | SSE 推送补全过程，不用轮询，也不用手动刷新 |
 | **每日复习** | FSRS-4.5 调度，按“重来 / 困难 / 良好 / 简单”调整间隔 |
@@ -87,7 +88,7 @@ cd ..
 python app.py
 ```
 
-打开 [http://localhost:1400](http://localhost:1400)，你的词库就在那里。
+打开 [http://localhost:1400](http://localhost:1400)，进入顶部「模型设置」配置 AI 服务，再开始添加单词。示例配置默认使用 Ollama；未连接模型时仍可浏览词库和复习。
 
 > 正在开发？运行 `./start.sh`，它会同时启动 FastAPI 热重载服务和 Vite 开发服务器。前端地址为 [http://localhost:5173](http://localhost:5173)。
 
@@ -138,42 +139,47 @@ python app.py
 
 ## 选择你的 AI
 
-编辑根目录下的 `config.json`。词库始终保存在本地；只有选择云端 Provider 时，待补全的单词内容才会发送给对应服务。
+在网页顶部进入「模型设置」，通过供应商卡片选择 **Ollama** 或 **DeepSeek**。点击「保存配置」后立即生效，无需重启后端。
+
+词库始终保存在本地；使用 DeepSeek 时，待补全的单词和生成提示词会发送到 DeepSeek 官方服务。
 
 ### Ollama：本地运行
 
-```json
-{
-  "provider": "ollama",
-  "ollama": {
-    "url": "http://localhost:11434/api/generate",
-    "model": "gemma4:26b"
-  }
-}
-```
-
-启动模型后即可使用：
+先启动 Ollama 并准备好模型，例如：
 
 ```bash
 ollama serve
 ollama run gemma4:26b
 ```
 
-模型名称可以替换；修改后同步更新 `config.json` 中的 `model`。
+如果 Ollama 已在运行，无需重复执行 `ollama serve`。模型名称可换成你实际安装的模型。
+
+在「模型设置」中：
+
+1. 点击 **Ollama** 供应商卡片。
+2. 填写 API 地址，默认是 `http://localhost:11434/api/generate`。
+3. 填写已安装的模型名称，例如 `gemma4:26b`，然后保存。
 
 ### DeepSeek：云端调用
 
-```json
-{
-  "provider": "deepseek",
-  "deepseek": {
-    "api_key": "sk-你的-key",
-    "model": "deepseek-chat"
-  }
-}
-```
+1. 在 [DeepSeek 开放平台](https://platform.deepseek.com/api_keys)创建 API Key。
+2. 点击 **DeepSeek** 供应商卡片，填写 API Key。
+3. 点击「刷新列表」，从直接展示的可用模型列表中选择模型；选中项会显示金色边框和「已选择」。
+4. 点击「保存配置」。保存时会再次核验模型是否可用。
 
-API Key 可在 [DeepSeek 开放平台](https://platform.deepseek.com/api_keys)创建。不要提交真实的 `config.json`。
+已有密钥时，页面不会显示原始密钥；输入框留空会保留现有值。密钥保存在后端的 `config.json` 中，不回传浏览器。不要提交或分享包含真实密钥的配置文件。
+
+**模型列表与失效提醒：**
+
+- 模型列表通过 DeepSeek 官方 `GET /models` 接口获取，不固定写死模型名称。已有密钥时，打开设置页会自动获取，也可以手动刷新。
+- 当前配置的模型不在官方可用列表中时，设置页会单独标出「已不可用」，顶部状态也会提醒重新配置。选择可用模型后才能保存。
+- 网络或鉴权失败时会提示获取失败，不会据此判定模型已过期。
+
+### 手动配置（可选）
+
+也可以编辑根目录的 `config.json`：`provider` 为 `ollama` 或 `deepseek`，对应配置分别保存在同名字段中，结构参见 [`config.json.example`](config.json.example)。DeepSeek 模型名称应以官方接口当前返回的列表为准。
+
+网页保存会同步更新配置文件和运行中的配置；**手动修改文件后，需要重启后端才能生效**。
 
 ---
 
