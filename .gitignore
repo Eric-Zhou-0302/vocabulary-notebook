@@ -8,3 +8,8 @@ words.json
 words.json.bak
 words.json.bak.*
 config.json
+
+.backups/
+.secrets/
+*.lock
+.pytest_cache/

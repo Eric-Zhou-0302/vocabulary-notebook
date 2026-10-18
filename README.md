@@ -279,3 +279,7 @@ cd frontend && npm run build
 ## License
 
 [MIT](https://opensource.org/licenses/MIT) © 2026 [Eric Zhou](https://ericzhou.net/)
+
+## 无损更新与 Agent 提示词
+
+更新前停止应用，用 maintenance.py backup 建立本地快照，更新后 verify 校验原词库、配置及学习记录，再启动。[安装和简短更新提示词](docs/AGENT_INSTALL_UPDATE.md)。

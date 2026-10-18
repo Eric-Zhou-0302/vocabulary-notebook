@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fpdf import FPDF
 
 import config
+import instance_lock
 import fsrs
 
 # ─── App ──────────────────────────────────────────────────
@@ -31,26 +32,32 @@ import fsrs
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _event_queue, _enrich_queue
-    # 启动时校验配置
+    cache_lock = instance_lock.acquire(DATA_FILE)
     try:
-        provider = config.get_provider()
-        print(f"  [config] provider: {provider}")
-    except RuntimeError as e:
-        print(f"  [config] 配置错误：{e}")
-        raise
-    _event_queue = asyncio.Queue()
-    _enrich_queue = asyncio.Queue()
-    worker_task = asyncio.create_task(_enrich_worker())
-    backup_task = asyncio.create_task(_periodic_backup_loop())
-    yield
-    backup_task.cancel()
-    worker_task.cancel()
-    for t in (backup_task, worker_task):
+        global _event_queue, _enrich_queue
+        # 启动时校验配置
         try:
-            await t
-        except asyncio.CancelledError:
-            pass
+            provider = config.get_provider()
+            print(f"  [config] provider: {provider}")
+        except RuntimeError as e:
+            print(f"  [config] 配置错误：{e}")
+            raise
+        _event_queue = asyncio.Queue()
+        _enrich_queue = asyncio.Queue()
+        worker_task = asyncio.create_task(_enrich_worker())
+        backup_task = asyncio.create_task(_periodic_backup_loop())
+        try:
+            yield
+        finally:
+            backup_task.cancel()
+            worker_task.cancel()
+            for t in (backup_task, worker_task):
+                try:
+                    await t
+                except asyncio.CancelledError:
+                    pass
+    finally:
+        cache_lock.close()
 
 
 async def _periodic_backup_loop():
