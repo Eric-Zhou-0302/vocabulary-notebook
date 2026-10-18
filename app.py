@@ -501,6 +501,9 @@ def now_iso() -> str:
 
 def _parse_review_time(value: str) -> datetime:
     """解析复习时间；兼容早期可能写入的无时区 ISO 字符串。"""
+    # Python 3.9 accepts an explicit UTC offset, but not the ISO UTC suffix Z.
+    if isinstance(value, str) and value.endswith("Z"):
+        value = value[:-1] + "+00:00"
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=CHINA_TZ)

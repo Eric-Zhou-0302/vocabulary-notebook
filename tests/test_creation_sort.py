@@ -42,3 +42,8 @@ def test_legacy_invalid_dates_and_equal_instants_have_stable_order(isolated):
     assert [w["id"] for w in app._filter_words(data, "", "", "created_desc")] == ["z", "a", "missing", "invalid"]
     assert [w["id"] for w in app._filter_words(data, "", "", "alpha_asc")] == ["a", "invalid", "missing", "z"]
     assert app._filter_words(data, "", "") == data["words"]
+
+
+@pytest.mark.parametrize("value", ["2026-10-18T03:00:00Z", "2026-10-18T03:00:00.123456Z"])
+def test_utc_suffix_matches_explicit_offset_on_older_python(value):
+    assert app._parse_review_time(value) == app._parse_review_time(value[:-1] + "+00:00")
