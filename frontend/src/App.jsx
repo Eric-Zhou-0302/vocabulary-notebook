@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import WordList from './pages/WordList'
 import WordNew from './pages/WordNew'
@@ -9,10 +9,20 @@ import ModelStatus from './components/ModelStatus'
 import { useGlobalShortcuts } from './useGlobalShortcuts'
 import { useDueCount } from './useDueCount'
 import HelpModal from './components/HelpModal'
+import CloudStatus from './components/CloudStatus'
+import Settings from './pages/Settings'
+import { BookPicker, useBooks } from './Books'
 
 export default function App() {
   const location = useLocation()
-  const dueCount = useDueCount()
+  const { active } = useBooks()
+  const dueCount = useDueCount(active)
+  const [cloudVersion, setCloudVersion] = useState(0)
+  useEffect(() => {
+    const refresh = () => { setCloudVersion(v => v + 1); window.dispatchEvent(new Event('review-stats-changed')) }
+    window.addEventListener('cloud-data-changed', refresh)
+    return () => window.removeEventListener('cloud-data-changed', refresh)
+  }, [])
   const searchInputRef = useRef(null)
   const [helpOpen, setHelpOpen] = useState(false)
   const toggleHelp = useCallback(() => setHelpOpen(o => !o), [])
@@ -41,12 +51,15 @@ export default function App() {
           <ThemeToggle />
         </nav>
       </header>
+      <CloudStatus />
+      <BookPicker />
       <main className="app-main">
-        <Routes>
+        <Routes key={location.pathname === '/settings' ? 'settings' : location.pathname === '/word/new' ? `add:${active}` : `${active}:${cloudVersion}`}>
           <Route path="/" element={<WordList searchInputRef={searchInputRef} />} />
           <Route path="/word/new" element={<WordNew />} />
           <Route path="/word/:id" element={<WordDetail />} />
           <Route path="/review" element={<Review />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>
       <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />

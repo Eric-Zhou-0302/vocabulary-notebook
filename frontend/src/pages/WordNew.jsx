@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createWord } from '../api'
+import { useBooks } from '../Books'
 
 function useProviderLabel() {
   const [label, setLabel] = useState('模型')
@@ -18,6 +19,8 @@ function useProviderLabel() {
 
 export default function WordNew() {
   const [word, setWord] = useState('')
+  const { books, active } = useBooks()
+  const [bookId, setBookId] = useState(active || 'default')
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState(null)
   const navigate = useNavigate()
@@ -28,12 +31,13 @@ export default function WordNew() {
     if (!word.trim()) return
     setLoading(true)
     try {
-      await createWord(word.trim())
+      await createWord(word.trim(), '', bookId)
       setWord('')
+      window.dispatchEvent(new Event('library-changed'))
+      window.dispatchEvent(new Event('review-stats-changed'))
       setToast({ type: 'info', msg: `「${word.trim()}」已保存` })
       setTimeout(() => setToast(null), 2000)
     } catch (err) {
-      setWord('')
       if (err.status === 409) {
         setToast({ type: 'warn', msg: err.message })
       } else {
@@ -57,9 +61,15 @@ export default function WordNew() {
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
       <h2 style={{ marginBottom: 20 }}>添加单词</h2>
       <form onSubmit={handleSubmit}>
+        <div className="form-group"><label htmlFor="new-word-book">保存到</label>
+          <select id="new-word-book" value={bookId} onChange={e => setBookId(e.target.value)}>
+            {books.map(book => <option key={book.id} value={book.id}>{book.name}</option>)}
+          </select></div>
         <div className="form-group">
-          <label>单词</label>
+          <label htmlFor="new-word">单词</label>
           <input
+            id="new-word"
+            maxLength={200}
             type="text"
             value={word}
             onChange={e => setWord(e.target.value)}
@@ -77,7 +87,7 @@ export default function WordNew() {
           </button>
         </div>
         <p style={{ marginTop: 14, fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
-          Enter 保存 · Esc 返回 · 释义/音标/例句由 {providerLabel} 自动补充
+          Enter 保存 · Esc 返回 · 释义由 {providerLabel} 补充；离线也能保存
         </p>
       </form>
     </div>

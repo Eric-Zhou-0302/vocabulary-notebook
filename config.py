@@ -57,3 +57,12 @@ def get_srs_config() -> dict:
     if not 0 <= daily_new_limit <= 100:
         raise RuntimeError("srs.daily_new_limit 必须在 0 到 100 之间")
     return {"daily_new_limit": daily_new_limit}
+
+
+def get_sync_config() -> dict:
+    sync = load_config().get("sync", {})
+    interval = sync.get("interval_seconds", 30)
+    if type(interval) is not int or not 10 <= interval <= 3600:
+        raise RuntimeError("sync.interval_seconds 必须是 10 到 3600 之间的整数")
+    return {"interval_seconds": interval,
+            "credentials_dir": sync.get("credentials_dir", ".secrets")}

@@ -125,6 +125,7 @@ def test_again_increments_lapses_on_repeated_review(isolated_words):
 def test_review_rejects_invalid_rating_without_writing(isolated_words):
     original = {"words": [_word("target", "safe", "2026-08-01T09:00:00+08:00")]}
     app.save_words(original)
+    original = app.load_words()  # migrated schema also includes notebooks and sync metadata
 
     with pytest.raises(HTTPException) as exc_info:
         app.post_review("target", {"rating": 5})

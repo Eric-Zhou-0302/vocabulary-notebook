@@ -2,14 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { fetchReviewStats } from './api'
 
 /** 导航栏待复习角标：首次加载、评分后、回到页面和每 60 秒刷新。 */
-export function useDueCount() {
+export function useDueCount(notebookId) {
   const [dueCount, setDueCount] = useState(0)
 
   const refresh = useCallback(() => {
     fetchReviewStats()
       .then(stats => setDueCount(stats.due_today || 0))
       .catch(() => {})
-  }, [])
+  }, [notebookId])
 
   useEffect(() => {
     refresh()
