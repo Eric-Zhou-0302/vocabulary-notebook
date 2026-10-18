@@ -28,6 +28,7 @@ def word(word_id, created_at, **extra):
 def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "DATA_FILE", tmp_path / "words.json")
     monkeypatch.setattr(app, "_enrich_states", {})
+    monkeypatch.setattr(app, "_new_enrichment_candidates", {})
     monkeypatch.setattr(app, "_enriching_ids", {})
     monkeypatch.setattr(app, "_enrich_current", None)
     monkeypatch.setattr(app, "_enrich_batch_total", 0)
@@ -60,6 +61,11 @@ def test_preview_status_and_persisted_result_survive_missed_sse(isolated, monkey
         worker = asyncio.create_task(app._enrich_worker())
         try:
             await asyncio.wait_for(app._enrich_queue.join(), timeout=2)
+            if outcome == "empty":
+                assert not app.load_words()["words"]
+                assert app._enrich_states[word_id]["status"] == "removed"
+                assert app._event_queue.get_nowait()["removed"] is True
+                return
             result = app.get_word(word_id)  # No SSE consumer is required for the preview.
             if outcome == "success":
                 assert result["enrichment"]["status"] == "ready"

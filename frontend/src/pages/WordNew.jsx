@@ -33,6 +33,7 @@ export default function WordNew() {
     setAddedWords(previous => previous.map(entry => {
       if (entry.word.id !== result.word.id) return entry
       // A request started before an SSE success must not erase the displayed definition.
+      if (['removed', 'deleted'].includes(entry.enrichment?.status)) return entry
       if (entry.word.definition && !result.word.definition) return entry
       return { ...entry, ...result }
     }))
@@ -42,9 +43,9 @@ export default function WordNew() {
       ? { ...entry, word: { ...entry.word, ...fields }, enrichment: { status: fields.definition ? 'ready' : 'idle' } } : entry))
     window.dispatchEvent(new Event('review-stats-changed'))
   }, [])
-  const handleFailed = useCallback((id, _word, reason) => {
+  const handleFailed = useCallback((id, _word, reason, detail) => {
     setAddedWords(previous => previous.map(entry => entry.word.id === id
-      ? { ...entry, enrichment: { status: 'failed', error: reason } } : entry))
+      ? { ...entry, enrichment: { status: detail?.removed ? 'removed' : 'failed', error: reason } } : entry))
   }, [])
   useSSE({ onEnriched: handleEnriched, onEnrichFailed: handleFailed })
 
@@ -68,7 +69,7 @@ export default function WordNew() {
         if (alive) results.forEach(result => { if (result.status === 'fulfilled') updateAdded(result.value) })
       } finally { running = false }
     }
-    // The shared SSE queue can deliver an event to another tab; recover from persisted results.
+    // Recover persisted results after a disconnected or missed SSE notification.
     const timer = setInterval(refresh, 2000)
     return () => { alive = false; clearInterval(timer) }
   }, [hasPending, updateAdded])
@@ -153,7 +154,7 @@ export default function WordNew() {
         <div aria-live="polite" aria-relevant="additions text">
           {addedWords.map((entry, index) => <article key={entry.word.id}>
             {entry.existing && <p className="added-words-hint">单词本中已有 · 已展示原记录</p>}
-            <WordCard word={entry.word} index={index} />
+            {['removed', 'deleted'].includes(entry.enrichment?.status) ? <h4>{entry.word.word}</h4> : <WordCard word={entry.word} index={index} />}
             {!entry.word.definition && <p className="added-words-hint">
               {['queued', 'processing'].includes(entry.enrichment?.status) ? '已保存，正在生成释义…'
                 : entry.enrichment?.status === 'deleted' ? '这个单词已被删除。'
