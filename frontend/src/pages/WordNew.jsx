@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { createWord } from '../api'
+import { createWord, fetchWord } from '../api'
+import { useSSE } from '../useSSE'
+import WordCard from '../components/WordCard'
 
 function useProviderLabel() {
   const [label, setLabel] = useState('模型')
@@ -20,20 +22,70 @@ export default function WordNew() {
   const [word, setWord] = useState('')
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState(null)
+  const [addedWords, setAddedWords] = useState([])
+  const addedRef = useRef([])
+  const inputRef = useRef(null)
   const navigate = useNavigate()
   const providerLabel = useProviderLabel()
+  useEffect(() => { addedRef.current = addedWords }, [addedWords])
+
+  const updateAdded = useCallback(result => {
+    setAddedWords(previous => previous.map(entry => {
+      if (entry.word.id !== result.word.id) return entry
+      // A request started before an SSE success must not erase the displayed definition.
+      if (entry.word.definition && !result.word.definition) return entry
+      return result
+    }))
+  }, [])
+  const handleEnriched = useCallback((id, fields) => {
+    setAddedWords(previous => previous.map(entry => entry.word.id === id
+      ? { word: { ...entry.word, ...fields }, enrichment: { status: fields.definition ? 'ready' : 'idle' } } : entry))
+    window.dispatchEvent(new Event('review-stats-changed'))
+  }, [])
+  const handleFailed = useCallback((id, _word, reason) => {
+    setAddedWords(previous => previous.map(entry => entry.word.id === id
+      ? { ...entry, enrichment: { status: 'failed', error: reason } } : entry))
+  }, [])
+  useSSE({ onEnriched: handleEnriched, onEnrichFailed: handleFailed })
+
+  const hasPending = addedWords.some(entry => ['queued', 'processing'].includes(entry.enrichment?.status))
+  useEffect(() => {
+    if (!hasPending) return
+    let alive = true
+    let running = false
+    async function refresh() {
+      if (running) return
+      running = true
+      try {
+        const pending = addedRef.current.filter(entry => ['queued', 'processing'].includes(entry.enrichment?.status))
+        const results = await Promise.allSettled(pending.map(async entry => {
+          try { return await fetchWord(entry.word.id) }
+          catch (err) {
+            if (err.status === 404) return { ...entry, enrichment: { status: 'deleted' } }
+            throw err
+          }
+        }))
+        if (alive) results.forEach(result => { if (result.status === 'fulfilled') updateAdded(result.value) })
+      } finally { running = false }
+    }
+    // The shared SSE queue can deliver an event to another tab; recover from persisted results.
+    const timer = setInterval(refresh, 2000)
+    return () => { alive = false; clearInterval(timer) }
+  }, [hasPending, updateAdded])
 
   async function handleSubmit(e) {
     e.preventDefault()
     if (!word.trim()) return
+    const submitted = word.trim()
     setLoading(true)
     try {
-      await createWord(word.trim())
-      setWord('')
-      setToast({ type: 'info', msg: `「${word.trim()}」已保存` })
+      const result = await createWord(submitted)
+      setAddedWords(previous => [result, ...previous].slice(0, 10))
+      setWord(current => current.trim() === submitted ? '' : current)
+      inputRef.current?.focus()
+      setToast({ type: 'info', msg: `「${submitted}」已保存` })
       setTimeout(() => setToast(null), 2000)
     } catch (err) {
-      setWord('')
       if (err.status === 409) {
         setToast({ type: 'warn', msg: err.message })
       } else {
@@ -58,8 +110,10 @@ export default function WordNew() {
       <h2 style={{ marginBottom: 20 }}>添加单词</h2>
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label>单词</label>
+          <label htmlFor="new-word">单词</label>
           <input
+            id="new-word"
+            ref={inputRef}
             type="text"
             value={word}
             onChange={e => setWord(e.target.value)}
@@ -80,6 +134,20 @@ export default function WordNew() {
           Enter 保存 · Esc 返回 · 释义/音标/例句由 {providerLabel} 自动补充
         </p>
       </form>
+      {addedWords.length > 0 && <section className="added-words" aria-labelledby="added-words-heading">
+        <h3 id="added-words-heading">刚刚添加 · 即时记忆</h3>
+        <p className="added-words-hint">本页展示最近添加的 10 个单词，点击卡片可查看或编辑。</p>
+        <div aria-live="polite" aria-relevant="additions text">
+          {addedWords.map((entry, index) => <article key={entry.word.id}>
+            <WordCard word={entry.word} index={index} />
+            {!entry.word.definition && <p className="added-words-hint">
+              {['queued', 'processing'].includes(entry.enrichment?.status) ? '已保存，正在生成释义…'
+                : entry.enrichment?.status === 'deleted' ? '这个单词已被删除。'
+                  : entry.enrichment?.error || '单词已保存，释义尚未生成，可在列表补全缺失或手动编辑。'}
+            </p>}
+          </article>)}
+        </div>
+      </section>}
     </div>
   )
 }

@@ -110,6 +110,8 @@ _event_queue = None
 _enrich_queue: Optional[asyncio.Queue] = None
 # word_id → 上次尝试时间戳，冷却期内不重复入队
 _enriching_ids: dict[str, float] = {}
+# Runtime status lets the add page recover missed SSE notifications without changing words.json.
+_enrich_states: dict[str, dict] = {}
 _ENRICH_COOLDOWN = 300  # 秒
 # 进度追踪
 _enrich_current: Optional[str] = None
@@ -1000,6 +1002,7 @@ async def _enqueue_enrich_batch(items: list) -> None:
     now = asyncio.get_event_loop().time()
     for word_id, word_text in items:
         _enriching_ids[word_id] = now
+        _enrich_states[word_id] = {"status": "queued"}
         await _enrich_queue.put((word_id, word_text))
     _enrich_batch_total += len(items)
 
@@ -1065,12 +1068,17 @@ def enrich_progress():
     }
 
 
+def _word_response(word: dict) -> dict:
+    state = {"status": "ready"} if word.get("definition") else _enrich_states.get(word["id"], {"status": "idle"})
+    return {"word": word, "enrichment": state}
+
+
 @app.get("/api/words/{word_id}")
 def get_word(word_id: str):
     data = load_words()
     for w in data["words"]:
         if w["id"] == word_id:
-            return {"word": w}
+            return _word_response(w)
     raise HTTPException(status_code=404, detail="单词不存在")
 
 
@@ -1107,7 +1115,7 @@ async def create_word(body: dict):
     # 送入补全队列，后台串行处理（持续累加，不重置 — 用户显式补全缺失才是新一批）
     await _enqueue_enrich_batch([(word_id, word_text)])
 
-    return {"word": word_obj}
+    return _word_response(word_obj)
 
 
 async def _enrich_worker():
@@ -1119,10 +1127,12 @@ async def _enrich_worker():
     while True:
         word_id, word_text = await _enrich_queue.get()
         _enrich_current = word_text
+        _enrich_states[word_id] = {"status": "processing"}
         logger.warning(f"[enrich-worker] picked: {word_text!r} id={word_id}")
         try:
             phonetic, definition, example = await enrich_word(word_text)
             if not phonetic and not definition and not example:
+                _enrich_states[word_id] = {"status": "failed", "error": "未生成释义，请稍后在单词列表补全缺失或手动编辑。"}
                 # 全空响应。词组(空格)静默不打扰 — 可能是 deepseek 对该词组不熟;
                 # 单个词推 toast 提示 — 可能是拼错/不存在/网络失败。
                 logger.warning(f"[enrich] {word_text} — deepseek 返回空")
@@ -1139,6 +1149,7 @@ async def _enrich_worker():
             # 后处理校验：拦截拼写错/中文例句/词性误标
             ok, reason = _enrich_post_check(word_text, phonetic, definition, example)
             if not ok:
+                _enrich_states[word_id] = {"status": "failed", "error": reason}
                 logger.warning(f"[enrich-check] {word_text} — 拒绝写回: {reason}")
                 if _event_queue is not None:
                     await _event_queue.put({
@@ -1163,6 +1174,7 @@ async def _enrich_worker():
                         save_words(data)
                         break
 
+            _enrich_states[word_id] = {"status": "idle"}
             _enrich_batch_done += 1
             if _event_queue is not None:
                 await _event_queue.put({
@@ -1173,6 +1185,7 @@ async def _enrich_worker():
                     "example": example,
                 })
         except Exception as e:
+            _enrich_states[word_id] = {"status": "failed", "error": "自动补全失败，单词已保存，可稍后补全或手动编辑。"}
             # 外层保护:任何意外异常都不让 worker 死,记录后继续下一个
             logger.exception(f"[enrich-worker] UNCAUGHT EXCEPTION: {e}")
             import asyncio as _aio
@@ -1268,6 +1281,14 @@ def _filter_words(data: dict, q: str, date: str, sort: str = "", letter: str = "
         words = sorted(words, key=lambda w: w["word"].lower())
     elif sort == "alpha_desc":
         words = sorted(words, key=lambda w: w["word"].lower(), reverse=True)
+    elif sort in ("created_desc", "created_asc"):
+        def added_at(word):
+            try:
+                created = _parse_review_time(word.get("created_at", "")).astimezone(timezone.utc)
+            except (ValueError, TypeError, OverflowError):
+                created = datetime.min.replace(tzinfo=timezone.utc)
+            return created, word["id"]
+        words = sorted(words, key=added_at, reverse=sort == "created_desc")
     return words
 
 
