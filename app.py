@@ -11,11 +11,12 @@ import socket
 import threading
 import uuid
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, Literal
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import httpx
+from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse
@@ -747,6 +748,75 @@ async def event_stream(request: Request):
     )
 
 
+# ─── API: 模型设置 ───────────────────────────────────────
+
+class OllamaSettings(BaseModel):
+    url: str = "http://localhost:11434/api/generate"
+    model: str = ""
+
+
+class DeepSeekSettings(BaseModel):
+    api_key: str = ""
+    model: str = ""
+
+
+class ModelSettings(BaseModel):
+    provider: Literal["ollama", "deepseek"]
+    ollama: OllamaSettings = Field(default_factory=OllamaSettings)
+    deepseek: DeepSeekSettings = Field(default_factory=DeepSeekSettings)
+
+
+async def deepseek_models(api_key: str) -> list[str]:
+    if not api_key:
+        raise HTTPException(400, "请先填写 DeepSeek API Key")
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get("https://api.deepseek.com/models",
+                                    headers={"Authorization": f"Bearer {api_key}"})
+        if resp.status_code in (401, 403):
+            raise HTTPException(400, "DeepSeek API Key 无效或无访问权限")
+        resp.raise_for_status()
+        models = sorted({item["id"] for item in resp.json()["data"]
+                         if isinstance(item.get("id"), str) and item["id"]})
+        if not models:
+            raise ValueError("empty models")
+        return models
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(502, "无法获取 DeepSeek 模型列表，请检查网络后重试；当前模型是否过期尚无法核验")
+
+
+@app.get("/api/model-settings")
+def read_model_settings():
+    return config.public_config()
+
+
+@app.post("/api/model-settings/deepseek-models")
+async def list_deepseek_models(settings: DeepSeekSettings):
+    key = settings.api_key.strip() or config.get_deepseek_config().get("api_key", "")
+    models = await deepseek_models(key)
+    return {"models": models}
+
+
+@app.put("/api/model-settings")
+async def update_model_settings(settings: ModelSettings):
+    ds = {"api_key": settings.deepseek.api_key.strip(), "model": settings.deepseek.model.strip()}
+    ollama = {"url": settings.ollama.url.strip(), "model": settings.ollama.model.strip()}
+    if settings.provider == "deepseek":
+        models = await deepseek_models(ds["api_key"] or config.get_deepseek_config().get("api_key", ""))
+        if ds["model"] not in models:
+            raise HTTPException(400, "所选模型已不在 DeepSeek 当前可用模型列表中，请刷新列表并重新选择")
+    elif not ollama["url"].startswith(("http://", "https://")):
+        raise HTTPException(400, "Ollama 地址必须以 http:// 或 https:// 开头")
+    try:
+        return config.save_model_config(settings.provider, ollama, ds)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except OSError:
+        raise HTTPException(500, "配置文件保存失败，请检查文件权限")
+
+
 # ─── API: 健康检查 ────────────────────────────────────────
 
 @app.get("/api/health")
@@ -763,13 +833,10 @@ async def health_check():
                     return {"provider": "ollama", "status": "connected"}
             elif config.get_provider() == "deepseek":
                 ds_cfg = config.get_deepseek_config()
-                resp = await client.post(
-                    "https://api.deepseek.com/chat/completions",
-                    json={"model": ds_cfg["model"], "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1},
-                    headers={"Authorization": f"Bearer {ds_cfg['api_key']}"},
-                )
-                if resp.is_success:
-                    return {"provider": "deepseek", "status": "connected"}
+                models = await deepseek_models(ds_cfg["api_key"])
+                if ds_cfg["model"] not in models:
+                    return {"provider": "deepseek", "status": "model_unavailable", "model": ds_cfg["model"]}
+                return {"provider": "deepseek", "status": "connected"}
     except Exception:
         pass
     return {"provider": config.get_provider(), "status": "disconnected"}
