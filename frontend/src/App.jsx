@@ -6,6 +6,7 @@ import WordDetail from './pages/WordDetail'
 import Review from './pages/Review'
 import ThemeToggle from './components/ThemeToggle'
 import ModelStatus from './components/ModelStatus'
+import ModelSettings from './pages/ModelSettings'
 import { useGlobalShortcuts } from './useGlobalShortcuts'
 import { useDueCount } from './useDueCount'
 import HelpModal from './components/HelpModal'
@@ -38,6 +39,7 @@ export default function App() {
           <Link to="/word/new" className={location.pathname === '/word/new' ? 'active' : ''}>
             添加单词
           </Link>
+          <Link to="/settings" className={location.pathname === '/settings' ? 'active' : ''}>模型设置</Link>
           <ThemeToggle />
         </nav>
       </header>
@@ -46,6 +48,7 @@ export default function App() {
           <Route path="/" element={<WordList searchInputRef={searchInputRef} />} />
           <Route path="/word/new" element={<WordNew />} />
           <Route path="/word/:id" element={<WordDetail />} />
+          <Route path="/settings" element={<ModelSettings />} />
           <Route path="/review" element={<Review />} />
         </Routes>
       </main>

@@ -165,6 +165,8 @@ ollama run gemma4:26b
 
 API Key 可在 [DeepSeek 开放平台](https://platform.deepseek.com/api_keys)创建。不要提交真实的 `config.json`。
 
+也可以在网页顶部的「模型设置」中切换供应商、修改 Ollama 地址和模型、配置 DeepSeek API Key。保存后立即生效，无需重启；密钥留空会保留原值，后端不会回传密钥。DeepSeek 下拉列表通过官方 `GET /models` 接口自动获取，也可手动刷新。当前模型不在官方列表时，设置页和顶部状态会明确提示不可用；网络或鉴权失败只提示无法核验，不判定模型过期。保存 DeepSeek 配置时会再次核验模型。
+
 ---
 
 ## 复习机制
