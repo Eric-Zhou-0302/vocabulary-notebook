@@ -1082,9 +1082,16 @@ def get_word(word_id: str):
     raise HTTPException(status_code=404, detail="单词不存在")
 
 
+def _normalize_new_word(text: str) -> str:
+    """Lower a title-cased English initial; retain acronyms and internal capitalization."""
+    if len(text) > 1 and "A" <= text[0] <= "Z" and text[1:].islower():
+        return text[0].lower() + text[1:]
+    return text
+
+
 @app.post("/api/words")
 async def create_word(body: dict):
-    word_text = body.get("word", "").strip()
+    word_text = _normalize_new_word(body.get("word", "").strip())
     if not word_text:
         raise HTTPException(status_code=422, detail="单词不能为空")
 
@@ -1096,7 +1103,7 @@ async def create_word(body: dict):
         if w["word"].lower() == word_lower:
             raise HTTPException(
                 status_code=409,
-                detail=f"「{w['word']}」已存在",
+                detail={"message": f"「{w['word']}」已存在，已展示已有内容", **_word_response(w)},
             )
 
     word_id = uuid.uuid4().hex[:12]

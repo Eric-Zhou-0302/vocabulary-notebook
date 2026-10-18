@@ -71,3 +71,46 @@ def test_manual_definition_is_immediately_available_and_existing_words_stay_comp
                               word("legacy", "2026-10-18T09:00:00+08:00", definition="")]})
     assert app.get_word("manual")["enrichment"]["status"] == "ready"
     assert app.get_word("legacy")["enrichment"]["status"] == "idle"
+
+
+def test_duplicate_returns_original_content_and_progress_without_writes_or_ai(isolated, monkeypatch):
+    existing = word("legacy", "2026-10-18T10:00:00+08:00", word="Contract", phonetic="/test/",
+                    srs={"d": 5.0, "s": 10.0, "reps": 3, "lapses": 1})
+    app.save_words({"words": [existing]})
+    original = isolated.read_bytes()
+    async def unexpected(*args):
+        pytest.fail("An existing word must not trigger AI enrichment")
+    monkeypatch.setattr(app, "_enqueue_enrich_batch", unexpected)
+    result = TestClient(app.app).post("/api/words", json={"word": "  contract  ", "definition": "Do not overwrite"})
+    assert result.status_code == 409
+    assert result.json()["detail"]["word"] == existing
+    assert result.json()["detail"]["enrichment"]["status"] == "ready"
+    assert isolated.read_bytes() == original
+
+
+@pytest.mark.parametrize("status", ["queued", "processing", "failed"])
+def test_duplicate_returns_current_pending_or_failure_state_without_retry(isolated, monkeypatch, status):
+    existing = word("pending", "2026-10-18T10:00:00+08:00", definition="")
+    app.save_words({"words": [existing]})
+    app._enrich_states["pending"] = {"status": status}
+    monkeypatch.setattr(app, "_enrich_queue", asyncio.Queue())
+    original = isolated.read_bytes()
+    result = TestClient(app.app).post("/api/words", json={"word": "Pending"})
+    assert result.status_code == 409
+    assert result.json()["detail"]["enrichment"]["status"] == status
+    assert app._enrich_queue.qsize() == 0
+    assert isolated.read_bytes() == original
+
+
+@pytest.mark.parametrize(("entered", "stored"), [
+    ("  Contract  ", "contract"), ("Contract law", "contract law"),
+    ("API", "API"), ("I", "I"), ("iPhone", "iPhone"),
+    ("McDonald", "McDonald"), ("DNA-binding", "DNA-binding"), ("contract", "contract"),
+])
+def test_initial_normalization_is_applied_before_persistence_and_enrichment(isolated, monkeypatch, entered, stored):
+    monkeypatch.setattr(app, "_enrich_queue", asyncio.Queue())
+    result = TestClient(app.app).post("/api/words", json={"word": entered})
+    assert result.status_code == 200
+    assert result.json()["word"]["word"] == stored
+    assert app.load_words()["words"][0]["word"] == stored
+    assert app._enrich_queue.get_nowait()[1] == stored

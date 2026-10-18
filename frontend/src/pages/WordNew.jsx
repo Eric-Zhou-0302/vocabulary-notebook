@@ -34,12 +34,12 @@ export default function WordNew() {
       if (entry.word.id !== result.word.id) return entry
       // A request started before an SSE success must not erase the displayed definition.
       if (entry.word.definition && !result.word.definition) return entry
-      return result
+      return { ...entry, ...result }
     }))
   }, [])
   const handleEnriched = useCallback((id, fields) => {
     setAddedWords(previous => previous.map(entry => entry.word.id === id
-      ? { word: { ...entry.word, ...fields }, enrichment: { status: fields.definition ? 'ready' : 'idle' } } : entry))
+      ? { ...entry, word: { ...entry.word, ...fields }, enrichment: { status: fields.definition ? 'ready' : 'idle' } } : entry))
     window.dispatchEvent(new Event('review-stats-changed'))
   }, [])
   const handleFailed = useCallback((id, _word, reason) => {
@@ -73,6 +73,15 @@ export default function WordNew() {
     return () => { alive = false; clearInterval(timer) }
   }, [hasPending, updateAdded])
 
+  function showRecent(result) {
+    setAddedWords(previous => [result, ...previous.filter(entry => entry.word.id !== result.word.id)].slice(0, 10))
+  }
+
+  function clearSubmitted(submitted) {
+    setWord(current => current.trim() === submitted ? '' : current)
+    inputRef.current?.focus()
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (!word.trim()) return
@@ -80,13 +89,16 @@ export default function WordNew() {
     setLoading(true)
     try {
       const result = await createWord(submitted)
-      setAddedWords(previous => [result, ...previous].slice(0, 10))
-      setWord(current => current.trim() === submitted ? '' : current)
-      inputRef.current?.focus()
-      setToast({ type: 'info', msg: `「${submitted}」已保存` })
+      showRecent(result)
+      clearSubmitted(submitted)
+      setToast({ type: 'info', msg: `「${result.word.word}」已保存` })
       setTimeout(() => setToast(null), 2000)
     } catch (err) {
-      if (err.status === 409) {
+      if (err.status === 409 && err.details?.word?.id) {
+        showRecent({ word: err.details.word, enrichment: err.details.enrichment, existing: true })
+        clearSubmitted(submitted)
+        setToast({ type: 'info', msg: err.message })
+      } else if (err.status === 409) {
         setToast({ type: 'warn', msg: err.message })
       } else {
         setToast({ type: 'error', msg: err.message })
@@ -132,13 +144,15 @@ export default function WordNew() {
         </div>
         <p style={{ marginTop: 14, fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
           Enter 保存 · Esc 返回 · 释义/音标/例句由 {providerLabel} 自动补充
+          <br />普通词自动小写开头；API、iPhone 等保留原拼写，需要调整时可在详情编辑。
         </p>
       </form>
       {addedWords.length > 0 && <section className="added-words" aria-labelledby="added-words-heading">
         <h3 id="added-words-heading">刚刚添加 · 即时记忆</h3>
-        <p className="added-words-hint">本页展示最近添加的 10 个单词，点击卡片可查看或编辑。</p>
+        <p className="added-words-hint">本页展示最近添加或再次查看的 10 个单词，重复输入会直接显示已有内容。</p>
         <div aria-live="polite" aria-relevant="additions text">
           {addedWords.map((entry, index) => <article key={entry.word.id}>
+            {entry.existing && <p className="added-words-hint">单词本中已有 · 已展示原记录</p>}
             <WordCard word={entry.word} index={index} />
             {!entry.word.definition && <p className="added-words-hint">
               {['queued', 'processing'].includes(entry.enrichment?.status) ? '已保存，正在生成释义…'
