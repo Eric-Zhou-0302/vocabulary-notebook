@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fpdf import FPDF
 
 import config
+from event_broadcast import EventBroadcast
 import fsrs
 
 # ─── App ──────────────────────────────────────────────────
@@ -38,7 +39,7 @@ async def lifespan(app: FastAPI):
     except RuntimeError as e:
         print(f"  [config] 配置错误：{e}")
         raise
-    _event_queue = asyncio.Queue()
+    _event_queue = EventBroadcast()
     _enrich_queue = asyncio.Queue()
     worker_task = asyncio.create_task(_enrich_worker())
     backup_task = asyncio.create_task(_periodic_backup_loop())
@@ -723,17 +724,19 @@ async def event_stream(request: Request):
     async def generate():
         if _event_queue is None:
             return
-        try:
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    event = await asyncio.wait_for(_event_queue.get(), timeout=15)
-                    yield f"data: {json.dumps(event)}\n\n"
-                except asyncio.TimeoutError:
-                    yield ": keepalive\n\n"
-        except asyncio.CancelledError:
-            pass
+        with _event_queue.subscribe() as events:
+            try:
+                yield ": connected\n\n"
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        event = await asyncio.wait_for(events.get(), timeout=15)
+                        yield f"data: {json.dumps(event)}\n\n"
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+            except asyncio.CancelledError:
+                pass
 
     return StreamingResponse(
         generate(),

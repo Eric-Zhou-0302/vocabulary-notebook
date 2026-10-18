@@ -7,6 +7,18 @@ from fastapi.testclient import TestClient
 import app
 
 
+@pytest.fixture(autouse=True)
+def queue_loop():
+    # Python 3.9 queues bind eagerly; asyncio.run in another test clears its loop.
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        yield
+    finally:
+        loop.close()
+        asyncio.set_event_loop(None)
+
+
 def word(word_id, created_at, **extra):
     return {"id": word_id, "word": word_id, "definition": "n. 测试", "phonetic": "",
             "example": "This is a test.", "created_at": created_at, **extra}
