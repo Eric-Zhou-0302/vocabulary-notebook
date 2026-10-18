@@ -279,3 +279,7 @@ cd frontend && npm run build
 ## License
 
 [MIT](https://opensource.org/licenses/MIT) © 2026 [Eric Zhou](https://ericzhou.net/)
+
+## Windows 一键启动
+
+提供带自定义图标的 VocabularyBook.exe、桌面快捷方式及托盘安全退出。[使用与构建说明](docs/WINDOWS_LAUNCHER.md)。原有 Ollama / DeepSeek 与词库格式保持不变。

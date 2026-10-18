@@ -3,6 +3,7 @@ import asyncio
 import csv
 import html as html_mod
 import io
+import hashlib
 import math
 import json
 import os
@@ -711,6 +712,13 @@ Reply ONLY with a JSON object, no other text:
     except Exception as e:
         logger.warning(f"[enrich] {word} — 请求失败：{type(e).__name__}: {e}")
         return "", "", ""
+
+
+@app.get("/api/instance")
+def desktop_instance():
+    root = str(Path(__file__).resolve().parent).rstrip("\\/").replace("\\", "/").lower()
+    return {"application": "vocabulary-notebook",
+            "installation_id": hashlib.sha256(root.encode("utf-8")).hexdigest()}
 
 
 # ─── API: SSE 事件流 ──────────────────────────────────────

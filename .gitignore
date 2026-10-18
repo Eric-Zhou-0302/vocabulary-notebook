@@ -8,3 +8,6 @@ words.json
 words.json.bak
 words.json.bak.*
 config.json
+
+.runtime/
+.pytest_cache/
