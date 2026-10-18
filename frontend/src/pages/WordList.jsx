@@ -14,7 +14,15 @@ export default function WordList() {
   const [dates, setDates] = useState([])
   const [q, setQ] = useState('')
   const [date, setDate] = useState('')
-  const [sort, setSort] = useState('')
+  const [sort, setSort] = useState(() => {
+    try {
+      const saved = localStorage.getItem('vocabulary-word-sort')
+      return ['', 'created_desc', 'created_asc', 'alpha_asc', 'alpha_desc'].includes(saved) ? saved : 'created_desc'
+    } catch { return 'created_desc' }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('vocabulary-word-sort', sort) } catch { /* Storage may be unavailable. */ }
+  }, [sort])
   const [letter, setLetter] = useState('')
   const [availableLetters, setAvailableLetters] = useState([])
   const [page, setPage] = useState(pageParam)
@@ -152,7 +160,10 @@ export default function WordList() {
           value={sort}
           onChange={e => { setSort(e.target.value); setPage(1) }}
           title="排序方式"
+          aria-label="排序方式"
         >
+          <option value="created_desc">添加时间：最新在前</option>
+          <option value="created_asc">添加时间：最早在前</option>
           <option value="">默认顺序</option>
           <option value="alpha_asc">首字母 A→Z</option>
           <option value="alpha_desc">首字母 Z→A</option>
