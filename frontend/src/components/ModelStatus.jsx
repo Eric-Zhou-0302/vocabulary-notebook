@@ -34,7 +34,7 @@ export default function ModelStatus() {
   const providerLabel = provider === 'ollama' ? 'Ollama' : provider === 'deepseek' ? 'DeepSeek' : provider
 
   return (
-    <Link to="/model-settings"
+    <Link to="/settings"
       className={`model-status ${connected ? 'on' : 'off'}`}
       title={connected ? `${providerLabel} 已连接` : `${providerLabel} 离线 — 音标和释义将无法自动补充`}
     >

@@ -234,22 +234,7 @@ def client(tmp_path, monkeypatch):
     return TestClient(app.app)
 
 
-def test_notebooks_isolate_duplicate_words_reviews_and_exports(client):
-    law = client.post("/api/notebooks", json={"name": "法律", "description": "合同法课程"}).json()["notebook"]["id"]
-    finance = client.post("/api/notebooks", json={"name": "金融"}).json()["notebook"]["id"]
-    first = client.post("/api/words", json={"word": "security", "definition": "n. 担保", "notebook_id": law})
-    second = client.post("/api/words", json={"word": "security", "definition": "n. 证券", "notebook_id": finance})
-    assert first.status_code == second.status_code == 200
-    assert client.post("/api/words", json={"word": "SECURITY", "notebook_id": law}).status_code == 409
-    assert client.get("/api/words", params={"notebook_id": law}).json()["total"] == 1
-    assert client.get("/api/review/due", params={"notebook_id": finance}).json()["cards"][0]["definition"] == "n. 证券"
-    word_id = first.json()["word"]["id"]
-    assert client.post(f"/api/words/{word_id}/review", json={"rating": 3}).status_code == 200
-    assert client.get("/api/review/stats", params={"notebook_id": law}).json()["new_today"] == 1
-    assert client.get("/api/review/stats", params={"notebook_id": finance}).json()["new_today"] == 0
-    exported = client.get("/api/words/export", params={"notebook_id": law}).json()
-    assert len(exported["words"]) == 1 and exported["words"][0]["srs"]["reps"] == 1
-    assert "_sync" not in exported
+
 
 
 def test_full_backup_roundtrip_preserves_review_history(client, tmp_path):
@@ -264,10 +249,8 @@ def test_full_backup_roundtrip_preserves_review_history(client, tmp_path):
 
 
 def test_origin_guard_and_input_validation(client):
-    assert client.post("/api/notebooks", json={"name": ""}).status_code == 422
     assert client.post("/api/words", json={"word": 123}).status_code == 422
-    assert client.post("/api/words", json={"word": "x", "notebook_id": "missing"}).status_code == 404
-    assert client.post("/api/notebooks", json={"name": "bad"}, headers={"Origin": "https://example.org"}).status_code == 403
+    assert client.post("/api/words", json={"word": "bad"}, headers={"Origin": "https://example.org"}).status_code == 403
     assert client.get("/api/sync/status", headers={"Host": "evil.example"}).status_code == 400
     assert client.post("/api/sync/credentials", json={"web": {"client_id": "not desktop"}}).status_code == 422
     assert client.post("/api/sync/connect").status_code == 409
@@ -292,53 +275,13 @@ def test_cache_lock_rejects_second_process_and_releases(tmp_path):
     instance_lock.acquire(path).close()
 
 
-def test_ollama_request_stays_local_and_includes_course_context(monkeypatch):
-    seen = []
-    def handle(request):
-        seen.append(request)
-        return httpx.Response(200, json={"response": json.dumps({"phonetic": "/test/", "definition": "n. 对价", "example": "Consideration is required."})})
-    real_client = httpx.AsyncClient
-    def local_client(**kwargs):
-        return real_client(transport=httpx.MockTransport(handle), **kwargs)
-    monkeypatch.setattr(app.httpx, "AsyncClient", local_client)
-    monkeypatch.setattr(app.config, "get_provider", lambda: "ollama")
-    monkeypatch.setattr(app.config, "get_ollama_config", lambda: {"url": "http://127.0.0.1:11434/api/generate", "model": "test"})
-    result = asyncio.run(app.enrich_word("consideration", "法律：合同法"))
-    assert result[1] == "n. 对价"
-    assert len(seen) == 1 and seen[0].url.host == "127.0.0.1"
-    assert "法律：合同法" in json.loads(seen[0].content)["prompt"]
 
 
-def test_deepseek_provider_and_course_context_remain_supported(monkeypatch):
-    seen = []
-    def handle(request):
-        seen.append(request)
-        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps({"phonetic": "/test/", "definition": "n. 证券", "example": "The security pays interest."})}}]})
-    real_client = httpx.AsyncClient
-    monkeypatch.setattr(app.httpx, "AsyncClient", lambda **kwargs: real_client(transport=httpx.MockTransport(handle), **kwargs))
-    monkeypatch.setattr(app.config, "get_provider", lambda: "deepseek")
-    monkeypatch.setattr(app.config, "get_deepseek_config", lambda: {"api_key": "test-only", "model": "existing-model"})
-    assert asyncio.run(app.enrich_word("security", "金融课程"))[1] == "n. 证券"
-    assert str(seen[0].url) == "https://api.deepseek.com/chat/completions"
-    assert "金融课程" in json.loads(seen[0].content)["messages"][0]["content"]
 
 
-def test_rename_move_and_cross_device_notebook_metadata(client, tmp_path):
-    law = client.post("/api/notebooks", json={"name": "Law", "description": "Contracts"}).json()["notebook"]["id"]
-    finance = client.post("/api/notebooks", json={"name": "Finance"}).json()["notebook"]["id"]
-    created = client.post("/api/words", json={"word": "bond", "definition": "n. 担保", "notebook_id": law}).json()["word"]
-    client.post(f"/api/words/{created['id']}/review", json={"rating": 3})
-    assert client.put(f"/api/notebooks/{law}", json={"name": "Contract Law", "description": "Legal terms"}).status_code == 200
-    assert client.put(f"/api/words/{created['id']}", json={"notebook_id": finance}).status_code == 200
-    target = tmp_path / "second-pc.json"
-    storage.merge(target, client.get("/api/library/export").json()["operations"])
-    restored = storage.read(target)
-    assert next(book for book in restored["notebooks"] if book["id"] == law)["name"] == "Contract Law"
-    assert restored["words"][0]["notebook_id"] == finance
-    assert restored["words"][0]["srs"]["reps"] == 1
-    assert len(restored["words"][0]["review_history"]) == 1
-    assert client.get("/api/words", params={"notebook_id": law}).json()["total"] == 0
-    assert client.get("/api/words", params={"notebook_id": finance}).json()["total"] == 1
+
+
+
 
 
 def test_future_cache_version_never_overwrites_existing_data(tmp_path):

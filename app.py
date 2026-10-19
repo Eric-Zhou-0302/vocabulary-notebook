@@ -27,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from fpdf import FPDF
 
 import config
+from event_broadcast import EventBroadcast
 import fsrs
 import sync_storage
 from drive_sync import DriveSync
@@ -53,23 +54,27 @@ async def lifespan(app: FastAPI):
     except Exception:
         cache_lock.close()
         raise
-    _event_queue = asyncio.Queue()
+    _new_enrichment_candidates.clear()
+    _enrich_states.clear()
+    _event_queue = EventBroadcast()
     _enrich_queue = asyncio.Queue()
     worker_task = asyncio.create_task(_enrich_worker())
     backup_task = asyncio.create_task(_periodic_backup_loop())
     sync_task = asyncio.create_task(_cloud_sync_loop())
-    yield
-    sync_task.cancel()
-    backup_task.cancel()
-    worker_task.cancel()
-    for t in (sync_task, backup_task, worker_task):
-        try:
-            await t
-        except asyncio.CancelledError:
-            pass
-    await asyncio.to_thread(cloud.lock.acquire)
-    cloud.lock.release()
-    cache_lock.close()
+    try:
+        yield
+    finally:
+        sync_task.cancel()
+        backup_task.cancel()
+        worker_task.cancel()
+        for t in (sync_task, backup_task, worker_task):
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+        await asyncio.to_thread(cloud.lock.acquire)
+        cloud.lock.release()
+        cache_lock.close()
 
 
 async def _periodic_backup_loop():
@@ -106,7 +111,8 @@ async def _periodic_backup_loop():
             print(f"  [backup] failed: {type(e).__name__}: {e}")
 
 
-app = FastAPI(title="Vocabulary Notebook", lifespan=lifespan)
+app = FastAPI(title="Vocabulary Notebook", version="1.1.0", lifespan=lifespan)
+
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
 
 app.add_middleware(
@@ -148,6 +154,15 @@ _event_queue = None
 _enrich_queue: Optional[asyncio.Queue] = None
 # word_id → 上次尝试时间戳，冷却期内不重复入队
 _enriching_ids: dict[str, float] = {}
+# Runtime status lets the add page recover missed SSE notifications without changing words.json.
+_enrich_states: dict[str, dict] = {}
+# Only unchanged entries created in this process can be automatically discarded.
+_new_enrichment_candidates: dict[str, dict] = {}
+
+
+class EnrichmentUnavailable(RuntimeError):
+    """Provider failures must never be interpreted as an invalid word."""
+
 _ENRICH_COOLDOWN = 300  # 秒
 # 进度追踪
 _enrich_current: Optional[str] = None
@@ -158,6 +173,7 @@ _enrich_batch_done: int = 0
 # 后端运行时每 10 分钟把 words.json 原子复制到 words.json.bak。
 # 万一主文件被误删/损坏/被代码错误重写，备份至少落后 ≤10 分钟。
 BACKUP_INTERVAL_SECONDS = 600  # 10 分钟
+
 
 
 # ─── PDF 字体路径 (fpdf2 纯 Python，零系统依赖) ──────────
@@ -506,26 +522,18 @@ _write_lock = threading.RLock()
 cloud = DriveSync(lambda: DATA_FILE, _write_lock, config.get_sync_config)
 
 
-async def _cloud_sync_loop():
-    while True:
-        try:
-            if cloud.status()["connected"] and not cloud.auth_pending:
-                await asyncio.to_thread(cloud.sync)
-        except (ValueError, RuntimeError, OSError) as exc:
-            cloud.error = str(exc)[:250]
-        await asyncio.sleep(config.get_sync_config()["interval_seconds"])
-
-
 def load_words() -> dict:
     """读取可离线使用的云端词库缓存；旧 words.json 自动无损迁移。"""
     with _write_lock:
         return sync_storage.read(DATA_FILE)
 
 
+
 def save_words(data: dict) -> None:
     """原子写入：先写临时文件再替换，防止并发写丢数据和写入中断损坏"""
     with _write_lock:
         sync_storage.commit(DATA_FILE, data)
+
 
 
 def now_iso() -> str:
@@ -543,6 +551,7 @@ def _parse_review_time(value: str) -> datetime:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=CHINA_TZ)
     return parsed.astimezone(CHINA_TZ)
+
 
 
 def _review_due_at(srs_state: dict) -> datetime:
@@ -628,8 +637,8 @@ def _review_stats_for(words: list[dict], now: datetime, daily_new_limit: int) ->
     }
 
 
-async def enrich_word(word: str, context: str = "") -> tuple[str, str, str]:
-    """调用配置好的 Provider 补充音标、释义和例句，返回 (phonetic, definition, example)。失败返回空串。"""
+async def enrich_word(word: str) -> tuple[str, str, str]:
+    """调用配置好的 Provider 补充音标、释义和例句，返回 (phonetic, definition, example)。服务或格式错误抛出异常；仅明确的三字段空响应表示未识别词汇。"""
     import logging
     logger = logging.getLogger("uvicorn")
 
@@ -709,8 +718,6 @@ primary meaning first (e.g., "pharmacy" — "药店" comes before
 
 Reply ONLY with a JSON object, no other text:
 {{"phonetic": "/.../", "definition": "n. 释义一，释义二\\nvt. 及物释义", "example": "..."}}'''
-    if context:
-        prompt += "\nCourse context (use for sense and example selection): " + context[:600]
     try:
         if config.get_provider() == "ollama":
             ollama_cfg = config.get_ollama_config()
@@ -739,17 +746,18 @@ Reply ONLY with a JSON object, no other text:
 
         match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
         if not match:
-            logger.warning(f"[enrich] {word} — 响应中未找到 JSON 对象：{text[:200]}")
-            return "", "", ""
+            raise EnrichmentUnavailable("模型返回格式不完整，请重试补全")
         data = json.loads(match.group())
-        return (
-            data.get("phonetic", ""),
-            data.get("definition", ""),
-            data.get("example", ""),
-        )
-    except Exception as e:
-        logger.warning(f"[enrich] {word} — 请求失败：{type(e).__name__}: {e}")
-        return "", "", ""
+        fields = ("phonetic", "definition", "example")
+        if not isinstance(data, dict) or any(not isinstance(data.get(key), str) for key in fields):
+            raise EnrichmentUnavailable("模型返回格式不完整，请重试补全")
+        return tuple(data[key].strip() for key in fields)
+    except EnrichmentUnavailable:
+        raise
+    except Exception as exc:
+        # Do not log provider responses, credentials or credential-bearing URLs.
+        logger.warning("[enrich] provider unavailable: %s", type(exc).__name__)
+        raise EnrichmentUnavailable("模型服务暂不可用，请检查配置、余额与网络后重试") from None
 
 
 # ─── API: SSE 事件流 ──────────────────────────────────────
@@ -761,17 +769,19 @@ async def event_stream(request: Request):
     async def generate():
         if _event_queue is None:
             return
-        try:
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    event = await asyncio.wait_for(_event_queue.get(), timeout=15)
-                    yield f"data: {json.dumps(event)}\n\n"
-                except asyncio.TimeoutError:
-                    yield ": keepalive\n\n"
-        except asyncio.CancelledError:
-            pass
+        with _event_queue.subscribe() as events:
+            try:
+                yield ": connected\n\n"
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        event = await asyncio.wait_for(events.get(), timeout=15)
+                        yield f"data: {json.dumps(event)}\n\n"
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+            except asyncio.CancelledError:
+                pass
 
     return StreamingResponse(
         generate(),
@@ -880,55 +890,590 @@ async def health_check():
 
 # ─── API: 单词 CRUD ───────────────────────────────────────
 
+@app.get("/api/words")
+def list_words(
+    q: str = Query(default=""),
+    date: str = Query(default=""),
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=20, ge=1, le=10000),
+    sort: str = Query(default=""),
+    letter: str = Query(default=""),
+):
+    data = load_words()
+    # 先按 q+date+sort 过滤一次，用于计算 available_letters（不含 letter 自身的影响）
+    pre_letter = _filter_words(data, q, date, sort)
+    available_letters = sorted({
+        w["word"][0].lower() for w in pre_letter if w.get("word")
+    })
+
+    words = _filter_words(data, q, date, sort, letter)
+
+    total = len(words)
+    start = (page - 1) * size
+    page_words = words[start : start + size]
+
+    return {
+        "words": page_words,
+        "total": total,
+        "page": page,
+        "size": size,
+        "pages": max((total + size - 1) // size, 1),
+        "available_letters": available_letters,
+    }
+
+
+@app.get("/api/dates")
+def list_dates():
+    data = load_words()
+    dates = sorted({
+        w["created_at"][:10]
+        for w in data["words"]
+        if "created_at" in w
+    }, reverse=True)
+    return {"dates": dates}
+
+
+# ─── API: 间隔复习 ────────────────────────────────────────
+
+@app.get("/api/review/stats")
+def review_stats():
+    """返回导航角标和复习页需要的轻量统计。"""
+    now = datetime.now(CHINA_TZ)
+    daily_new_limit = config.get_srs_config()["daily_new_limit"]
+    return _review_stats_for(load_words()["words"], now, daily_new_limit)
+
+
+@app.get("/api/review/due")
+def review_due(limit: int = Query(default=20, ge=1, le=100)):
+    """返回一批到期卡片：逾期复习优先，再用新词填满剩余额度。"""
+    now = datetime.now(CHINA_TZ)
+    daily_new_limit = config.get_srs_config()["daily_new_limit"]
+    words = [
+        word for word in load_words()["words"]
+        if word.get("definition", "").strip()
+    ]
+    stats = _review_stats_for(words, now, daily_new_limit)
+
+    due_reviews = []
+    for word in words:
+        if not word.get("srs"):
+            continue
+        try:
+            due_at = _review_due_at(word["srs"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if due_at <= now:
+            due_reviews.append((word, due_at))
+    due_reviews.sort(key=lambda item: item[1])
+
+    review_take = [word for word, _ in due_reviews[:limit]]
+    remaining_slots = limit - len(review_take)
+    new_quota = max(0, daily_new_limit - stats["new_today"])
+    new_words = sorted(
+        (word for word in words if not word.get("srs")),
+        key=lambda word: word.get("created_at", ""),
+    )
+    new_take = new_words[:min(remaining_slots, new_quota)]
+
+    cards = []
+    for word in review_take + new_take:
+        cards.append({
+            **word,
+            "is_new": not bool(word.get("srs")),
+            "predicted_intervals": _predicted_intervals(word.get("srs"), now),
+        })
+    return {"cards": cards, "stats": stats}
+
+
+@app.post("/api/words/{word_id}/review")
+def post_review(word_id: str, body: dict):
+    """记录一次评分并原子更新该单词的 FSRS 状态。"""
+    rating = body.get("rating")
+    if type(rating) is not int or rating not in (1, 2, 3, 4):
+        raise HTTPException(status_code=422, detail="rating 必须是 1、2、3 或 4")
+
+    now = datetime.now(CHINA_TZ)
+    with _write_lock:
+        data = load_words()
+        word = next((item for item in data["words"] if item["id"] == word_id), None)
+        if word is None:
+            raise HTTPException(status_code=404, detail="单词不存在")
+        if not word.get("definition", "").strip():
+            raise HTTPException(status_code=409, detail="缺少释义的单词暂不能复习")
+
+        previous = word.get("srs")
+        if previous:
+            try:
+                last_review = _parse_review_time(previous["last_review_at"])
+                elapsed_days = max((now - last_review).total_seconds() / 86400, 0.0)
+                difficulty, stability = fsrs.update(
+                    float(previous["d"]),
+                    float(previous["s"]),
+                    rating,
+                    elapsed_days,
+                )
+                first_review_at = previous.get(
+                    "first_review_at", previous["last_review_at"]
+                )
+                reps = int(previous.get("reps", 0)) + 1
+                lapses = int(previous.get("lapses", 0)) + (1 if rating == 1 else 0)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise HTTPException(status_code=409, detail="该单词的复习状态已损坏") from exc
+        else:
+            difficulty = fsrs.initial_difficulty(rating)
+            stability = fsrs.initial_stability(rating)
+            first_review_at = now.isoformat()
+            reps = 1
+            lapses = 1 if rating == 1 else 0
+
+        interval_days = fsrs.next_interval(stability)
+        due_at = now + timedelta(days=interval_days)
+        word["srs"] = {
+            "d": difficulty,
+            "s": stability,
+            "first_review_at": first_review_at,
+            "last_review_at": now.isoformat(),
+            "due_at": due_at.isoformat(),
+            "reps": reps,
+            "lapses": lapses,
+        }
+        word.setdefault("review_history", []).append({"id": uuid.uuid4().hex, "rating": rating, "at": now.isoformat()})
+        save_words(data)
+
+    card = {
+        **word,
+        "is_new": False,
+        "predicted_intervals": _predicted_intervals(word["srs"], now),
+    }
+    interval_seconds = interval_days * 86400
+    return {
+        "word": word,
+        "card": card,
+        "next_interval_seconds": interval_seconds,
+        "next_interval": fsrs.format_interval(interval_seconds),
+    }
+
+
+
+# 注意：/api/words/export 和 /api/words/enrich-missing 路由必须在
+# /api/words/{word_id} 之前，否则会被当成 word_id 匹配。
+@app.get("/api/words/export")
+def export_words(
+    format: str = Query(default="json"),
+    q: str = Query(default=""),
+    date: str = Query(default=""),
+    sort: str = Query(default=""),
+):
+    data = load_words()
+    words = _filter_words(data, q, date, sort)
+    today = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
+
+    if format == "csv":
+        out = io.StringIO()
+        out.write("﻿")  # UTF-8 BOM — Excel 看这个知道是 UTF-8,不会按 GBK 误读
+        w = csv.writer(out)
+        w.writerow(["单词", "音标", "释义", "例句", "日期"])
+        for item in words:
+            w.writerow([item["word"], item["phonetic"], item["definition"], item["example"], item["created_at"][:10]])
+        out.seek(0)
+        return StreamingResponse(
+            iter([out.getvalue().encode("utf-8")]),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename=vocabulary-{today}.csv"},
+        )
+
+    if format == "pdf":
+        use_cjk = _CJK_FONT_PATH is not None
+        pdf_bytes = _build_pdf(words, today, use_cjk, _CJK_FONT_PATH)
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=vocabulary-{today}.pdf"},
+        )
+
+    # 默认 JSON
+    out = io.StringIO()
+    json.dump({"words": words, "exported_at": now_iso()}, out, ensure_ascii=False, indent=2)
+    out.seek(0)
+    return StreamingResponse(
+        iter([out.getvalue()]),
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=vocabulary-{today}.json"},
+    )
+
+
+async def _enqueue_enrich_batch(items: list) -> None:
+    """送入 enrich 队列并累加 batch 计数器。
+
+    仅做"入队 + 累加"，不做重置。重置由调用方在合适的时机显式调用
+    `_maybe_reset_batch_if_idle()`，这样 enrich-missing 即使在 0 missing 提前
+    return 的路径上也能把上一批残留状态清掉。
+
+    调用方必须在同一协程内连续调用（不要跨 await），这样检查 + 入队 + 计数的
+    同步段不会被 worker 协程打断，竞态安全。
+    """
+    global _enrich_batch_total
+    if not items:
+        return
+    now = asyncio.get_event_loop().time()
+    for word_id, word_text in items:
+        _enriching_ids[word_id] = now
+        _enrich_states[word_id] = {"status": "queued"}
+        await _enrich_queue.put((word_id, word_text))
+    _enrich_batch_total += len(items)
+
+
+def _maybe_reset_batch_if_idle() -> None:
+    """若 worker 空闲 + 队列空 + 上一批已结束，重置 batch 计数器。
+
+    同步函数：调用方必须在 _enrich_queue.put 之前同一同步段内执行，竞态安全。
+    """
+    global _enrich_batch_total, _enrich_batch_done
+    if not _enrich_current and _enrich_queue.qsize() == 0 and _enrich_batch_total > 0:
+        _enrich_batch_total = 0
+        _enrich_batch_done = 0
+
+
+@app.post("/api/words/enrich-missing")
+async def enrich_missing():
+    """扫描缺失 definition 的单词，跳过冷却期内已完成/进行中的。"""
+    # 入口处先尝试重置上一批残留状态 — 即使下面 0 missing 提前 return，
+    # 也能让 batch_total/batch_done 清零，避免污染后续观察。
+    _maybe_reset_batch_if_idle()
+    now = asyncio.get_event_loop().time()
+    data = load_words()
+    missing = [
+        w for w in data["words"]
+        if not w.get("definition", "").strip()
+        and _enriching_ids.get(w["id"], 0) + _ENRICH_COOLDOWN < now
+    ]
+    if not missing:
+        in_cooldown = sum(
+            1 for w in data["words"]
+            if not w.get("definition", "").strip()
+            and _enriching_ids.get(w["id"], 0) + _ENRICH_COOLDOWN >= now
+        )
+        msg = f"没有需要补全的单词" if not in_cooldown else f"{in_cooldown} 个单词正在补全中或刚尝试过，请稍后"
+        return {"enriched": 0, "message": msg}
+
+    await _enqueue_enrich_batch([(w["id"], w["word"]) for w in missing])
+
+    return {
+        "enriched": len(missing),
+        "word_ids": [w["id"] for w in missing],
+        "message": f"已加入 {len(missing)} 个单词到补全队列，逐个处理中",
+    }
+
+
+@app.get("/api/enrich/progress")
+def enrich_progress():
+    """返回当前 enrichment 队列进度"""
+    queue_size = _enrich_queue.qsize() if _enrich_queue else 0
+    data = load_words()
+    total_missing = sum(
+        1 for w in data["words"]
+        if not w.get("definition", "").strip()
+    )
+    return {
+        "queue_size": queue_size,
+        "current_word": _enrich_current,
+        "batch_total": _enrich_batch_total,
+        "batch_done": _enrich_batch_done,
+        "total_missing": total_missing,
+        "is_processing": _enrich_current is not None,
+    }
+
+
+def _word_response(word: dict) -> dict:
+    state = {"status": "ready"} if word.get("definition") else _enrich_states.get(word["id"], {"status": "idle"})
+    return {"word": word, "enrichment": state}
+
+
+@app.get("/api/words/{word_id}")
+def get_word(word_id: str):
+    data = load_words()
+    for w in data["words"]:
+        if w["id"] == word_id:
+            return _word_response(w)
+    raise HTTPException(status_code=404, detail="单词不存在")
+
+
+def _normalize_new_word(text: str) -> str:
+    """Uppercase the English initial of a new entry without altering the remaining text."""
+    if text and "a" <= text[0] <= "z":
+        return text[0].upper() + text[1:]
+    return text
+
+
+@app.post("/api/words")
+async def create_word(body: dict):
+    word_text = _normalize_new_word(_text(body, "word", limit=200))
+    if not word_text:
+        raise HTTPException(status_code=422, detail="单词不能为空")
+
+    with _write_lock:
+        data = load_words()
+        word_lower = word_text.lower()
+
+        # 重复检测：同单词已存在时返回 409，附上已有记录供前端提示
+        for w in data["words"]:
+            if w["word"].lower() == word_lower:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"message": f"「{w['word']}」已存在，已展示已有内容", **_word_response(w)},
+                )
+
+        word_id = uuid.uuid4().hex[:12]
+        word_obj = {
+            "id": word_id,
+            "notebook_id": "default",
+            "word": word_text,
+            "definition": body.get("definition", "").strip(),
+            "phonetic": "",
+            "example": "",
+            "created_at": now_iso(),
+        }
+
+        data["words"].append(word_obj)
+        save_words(data)
+
+        if not word_obj["definition"]:
+            stored = load_words()
+            _new_enrichment_candidates[word_id] = {"word": dict(word_obj), "operations": _word_operation_ids(stored, word_id)}
+
+    # 送入补全队列，后台串行处理（持续累加，不重置 — 用户显式补全缺失才是新一批）
+    if not word_obj["definition"]:
+        await _enqueue_enrich_batch([(word_id, word_text)])
+
+    return _word_response(word_obj)
+
+
+
+def _discard_unrecognized_new_word(word_id):
+    with _write_lock:
+        candidate = _new_enrichment_candidates.get(word_id)
+        if candidate is None:
+            return False
+        data = load_words()
+        current = next((w for w in data["words"] if w["id"] == word_id), None)
+        if current != candidate["word"] or _word_operation_ids(data, word_id) != candidate["operations"]:
+            return False
+        data["words"] = [w for w in data["words"] if w["id"] != word_id]
+        save_words(data)
+        return True
+
+
+
+async def _reject_unrecognized(word_id, word_text):
+    removed = _discard_unrecognized_new_word(word_id)
+    reason = "未识别为有效词汇，已自动移除本次新增内容，请检查拼写。" if removed else "未识别为有效词汇，已有或已修改的内容已保留，请检查拼写。"
+    _enrich_states[word_id] = {"status": "removed" if removed else "failed", "error": reason}
+    if _event_queue is not None:
+        await _event_queue.put({"type": "enrich_failed", "word_id": word_id,
+                                "word": word_text, "reason": reason, "removed": removed})
+
+
+async def _enrich_worker():
+    """单 worker 串行调用模型，保留人工编辑内容。"""
+    global _enrich_current, _enrich_batch_done
+    import logging
+    logger = logging.getLogger("uvicorn")
+    logger.warning("[enrich-worker] started")
+    while True:
+        word_id, word_text = await _enrich_queue.get()
+        _enrich_states[word_id] = {"status": "processing"}
+        _enrich_current = word_text
+        logger.warning(f"[enrich-worker] picked: {word_text!r} id={word_id}")
+        try:
+            current_data = load_words()
+            current_word = next((w for w in current_data["words"] if w["id"] == word_id), None)
+            if current_word is None:
+                continue
+            phonetic, definition, example = await enrich_word(word_text)
+            if not phonetic and not definition and not example:
+                await _reject_unrecognized(word_id, word_text)
+                _enrich_batch_done += 1
+                continue
+
+            # 后处理校验：拦截拼写错/中文例句/词性误标
+            ok, reason = _enrich_post_check(word_text, phonetic, definition, example)
+            if not ok:
+                if reason.startswith(("word 不在英语词典", "词组中分词拼写错")):
+                    await _reject_unrecognized(word_id, word_text)
+                    _enrich_batch_done += 1
+                    continue
+                _enrich_states[word_id] = {"status": "failed", "error": reason}
+                logger.warning(f"[enrich-check] {word_text} — 拒绝写回: {reason}")
+                if _event_queue is not None:
+                    await _event_queue.put({
+                        "type": "enrich_failed",
+                        "word_id": word_id,
+                        "word": word_text,
+                        "reason": reason,
+                    })
+                _enriching_ids.pop(word_id, None)
+                continue
+
+            written = None
+            with _write_lock:
+                data = load_words()
+                for w in data["words"]:
+                    if w["id"] == word_id and w["word"] == word_text:
+                        if phonetic and not w.get("phonetic"):
+                            w["phonetic"] = phonetic
+                        if definition and not w.get("definition"):
+                            w["definition"] = definition
+                        if example and not w.get("example"):
+                            w["example"] = example
+                        save_words(data)
+                        written = {key: w[key] for key in ("phonetic", "definition", "example")}
+                        break
+
+            _enrich_batch_done += 1
+            if written is None:
+                reason = "单词已更改，旧补全结果未写入，请重新补全。"
+                _enrich_states[word_id] = {"status": "failed", "error": reason}
+                _enriching_ids.pop(word_id, None)
+                if _event_queue is not None:
+                    await _event_queue.put({"type": "enrich_failed", "word_id": word_id,
+                                            "word": word_text, "reason": reason})
+                continue
+            _enrich_states[word_id] = {"status": "ready" if written and written["definition"] else "idle"}
+            if written is not None and _event_queue is not None:
+                await _event_queue.put({
+                    "type": "enriched",
+                    "word_id": word_id,
+                    **written,
+                })
+        except EnrichmentUnavailable as exc:
+            _enrich_states[word_id] = {"status": "failed", "error": str(exc)}
+            _enrich_batch_done += 1
+            if _event_queue is not None:
+                await _event_queue.put({"type": "enrich_failed", "word_id": word_id,
+                                        "word": word_text, "reason": str(exc), "removed": False})
+        except Exception as e:
+            _enrich_states[word_id] = {"status": "failed", "error": "自动补全未完成，单词已保存，可以重试或手动编辑。"}
+            # 外层保护:任何意外异常都不让 worker 死,记录后继续下一个
+            logger.warning("[enrich-worker] failed: %s", type(e).__name__)
+            import asyncio as _aio
+            await _aio.sleep(1)
+        finally:
+            _new_enrichment_candidates.pop(word_id, None)
+            if _enrich_states.get(word_id, {}).get("status") == "processing":
+                _enrich_states[word_id] = {"status": "idle"}
+            _enriching_ids.pop(word_id, None)
+            _enrich_current = None
+            _enrich_queue.task_done()
+
+
+def _enrich_post_check(word: str, phonetic: str, definition: str, example: str) -> tuple[bool, str]:
+    """后处理校验 — 返回 (ok, reason)。
+
+    三道闸:拼写(pyenchant) / 例句语种(langdetect) / 释义 POS 行头(纯正则)。
+    任一失败 → 严格模式:不写回,清冷却,推 SSE enrich_failed 事件。
+    库未装时优雅降级(log warning 后跳过该闸)。
+    """
+    import logging
+    logger = logging.getLogger("uvicorn")
+
+    # 1. 拼写 — 拦截 conffin/cublic/fivre/weav/undeter 这类
+    # 词组(空格分隔)按分词查,避免 "bottle stoppers" 整串被误拒
+    try:
+        import enchant
+        d = enchant.Dict("en_US")
+        if " " in word:
+            bad = [p for p in word.split() if not d.check(p)]
+            if bad:
+                return False, f"词组中分词拼写错 {bad}: {word!r}"
+        else:
+            if not d.check(word):
+                return False, f"word 不在英语词典(疑似拼写错): {word!r}"
+    except ImportError:
+        pass  # pyenchant 未装 — 降级跳过
+    except Exception as e:
+        logger.warning(f"[enrich-check] {word} — 拼写检查异常: {type(e).__name__}: {e}")
+
+    # 2. 例句含中文字符 → 拦截(algebra 中文例句这类)
+    # 不做通用语种检测:langdetect 在 < 10 词的例句上误判率 30%+,
+    # 会把短英文误判为 ro/af/so 等。直接看是否含中文更稳。
+    if example and example.strip() and re.search(r"[一-鿿]", example):
+        return False, f"例句包含中文字符: {example!r}"
+
+    # 3. 释义每行以合法 POS 开头 — 拦截 divergent n. / intricate vt. / 冷门义项
+    POS = {"vt.", "vi.", "n.", "adj.", "adv.", "prep.", "conj.", "pron."}
+    for line in (definition or "").split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        if not any(line.startswith(p) for p in POS):
+            return False, f"释义行不以 POS 开头: {line!r}"
+
+    return True, ""
+
+
+@app.put("/api/words/{word_id}")
+def update_word(word_id: str, body: dict):
+    with _write_lock:
+        data = load_words()
+        for w in data["words"]:
+            if w["id"] == word_id:
+                if "word" in body:
+                    w["word"] = body["word"].strip()
+                if "definition" in body:
+                    w["definition"] = body["definition"].strip()
+                save_words(data)
+                _new_enrichment_candidates.pop(word_id, None)
+                return {"word": w}
+        raise HTTPException(status_code=404, detail="单词不存在")
+
+
+@app.delete("/api/words/{word_id}")
+def delete_word(word_id: str):
+    with _write_lock:
+        data = load_words()
+        before = len(data["words"])
+        data["words"] = [w for w in data["words"] if w["id"] != word_id]
+        if len(data["words"]) == before:
+            raise HTTPException(status_code=404, detail="单词不存在")
+        save_words(data)
+        _new_enrichment_candidates.pop(word_id, None)
+        return {"ok": True}
+
+
+# ─── 导出辅助函数 ─────────────────────────────────────────
+
+def _filter_words(data: dict, q: str, date: str, sort: str = "", letter: str = "") -> list:
+    words = data["words"]
+    if date:
+        words = [w for w in words if w["created_at"].startswith(date)]
+    if q:
+        ql = q.lower()
+        words = [w for w in words if ql in w["word"].lower() or ql in w["definition"].lower()]
+    if letter:
+        l = letter.lower()
+        words = [w for w in words if w["word"].lower().startswith(l)]
+    if sort == "alpha_asc":
+        words = sorted(words, key=lambda w: w["word"].lower())
+    elif sort == "alpha_desc":
+        words = sorted(words, key=lambda w: w["word"].lower(), reverse=True)
+    return words
+
+
+async def _cloud_sync_loop():
+    while True:
+        try:
+            if cloud.status()["connected"] and not cloud.auth_pending:
+                await asyncio.to_thread(cloud.sync)
+        except (ValueError, RuntimeError, OSError) as exc:
+            cloud.error = str(exc)[:250]
+        await asyncio.sleep(config.get_sync_config()["interval_seconds"])
+
+
 def _text(body, key, default="", limit=100000):
     value = body.get(key, default)
     if not isinstance(value, str) or len(value) > limit:
         raise HTTPException(422, f"{key} 必须是长度不超过 {limit} 的文本")
     return value.strip()
-
-
-def _book_words(data, notebook_id):
-    if notebook_id:
-        if not any(book["id"] == notebook_id for book in data["notebooks"]):
-            raise HTTPException(404, "单词本不存在，请重新选择")
-        return [word for word in data["words"] if word.get("notebook_id", "default") == notebook_id]
-    return data["words"]
-
-
-@app.get("/api/notebooks")
-def list_notebooks():
-    data = load_words()
-    return {"notebooks": [{**book, "word_count": len(_book_words(data, book["id"]))}
-                          for book in data["notebooks"]]}
-
-
-@app.post("/api/notebooks")
-def create_notebook(body: dict):
-    name = _text(body, "name", limit=80)
-    if not name:
-        raise HTTPException(422, "单词本名称不能为空")
-    with _write_lock:
-        data = load_words()
-        book = {"id": uuid.uuid4().hex, "name": name,
-                "description": _text(body, "description", limit=500), "created_at": now_iso()}
-        data["notebooks"].append(book)
-        save_words(data)
-    return {"notebook": book}
-
-
-@app.put("/api/notebooks/{notebook_id}")
-def update_notebook(notebook_id: str, body: dict):
-    with _write_lock:
-        data = load_words()
-        for book in data["notebooks"]:
-            if book["id"] == notebook_id:
-                name = _text(body, "name", book["name"], limit=80)
-                if not name:
-                    raise HTTPException(422, "单词本名称不能为空")
-                book.update(name=name, description=_text(body, "description", book.get("description", ""), limit=500))
-                save_words(data)
-                return {"notebook": book}
-    raise HTTPException(404, "单词本不存在")
 
 
 @app.get("/api/sync/status")
@@ -1048,528 +1593,10 @@ def import_library(body: dict):
         save_words(data)
     return {"imported": imported, "message": f"已导入 {imported} 个单词；已有记录保留原样"}
 
-@app.get("/api/words")
-def list_words(
-    q: str = Query(default=""),
-    date: str = Query(default=""),
-    page: int = Query(default=1, ge=1),
-    size: int = Query(default=20, ge=1, le=10000),
-    sort: str = Query(default=""),
-    letter: str = Query(default=""),
-    notebook_id: str = "",
-):
-    data = load_words()
-    data["words"] = _book_words(data, notebook_id)
-    # 先按 q+date+sort 过滤一次，用于计算 available_letters（不含 letter 自身的影响）
-    pre_letter = _filter_words(data, q, date, sort)
-    available_letters = sorted({
-        w["word"][0].lower() for w in pre_letter if w.get("word")
-    })
 
-    words = _filter_words(data, q, date, sort, letter)
-
-    total = len(words)
-    start = (page - 1) * size
-    page_words = words[start : start + size]
-
-    return {
-        "words": page_words,
-        "total": total,
-        "page": page,
-        "size": size,
-        "pages": max((total + size - 1) // size, 1),
-        "available_letters": available_letters,
-    }
-
-
-@app.get("/api/dates")
-def list_dates(notebook_id: str = ""):
-    data = load_words()
-    dates = sorted({
-        w["created_at"][:10]
-        for w in _book_words(data, notebook_id)
-        if "created_at" in w
-    }, reverse=True)
-    return {"dates": dates}
-
-
-# ─── API: 间隔复习 ────────────────────────────────────────
-
-@app.get("/api/review/stats")
-def review_stats(notebook_id: str = ""):
-    """返回导航角标和复习页需要的轻量统计。"""
-    now = datetime.now(CHINA_TZ)
-    daily_new_limit = config.get_srs_config()["daily_new_limit"]
-    return _review_stats_for(_book_words(load_words(), notebook_id), now, daily_new_limit)
-
-
-@app.get("/api/review/due")
-def review_due(limit: int = Query(default=20, ge=1, le=100), notebook_id: str = ""):
-    """返回一批到期卡片：逾期复习优先，再用新词填满剩余额度。"""
-    now = datetime.now(CHINA_TZ)
-    daily_new_limit = config.get_srs_config()["daily_new_limit"]
-    words = [
-        word for word in _book_words(load_words(), notebook_id)
-        if word.get("definition", "").strip()
-    ]
-    stats = _review_stats_for(words, now, daily_new_limit)
-
-    due_reviews = []
-    for word in words:
-        if not word.get("srs"):
-            continue
-        try:
-            due_at = _review_due_at(word["srs"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        if due_at <= now:
-            due_reviews.append((word, due_at))
-    due_reviews.sort(key=lambda item: item[1])
-
-    review_take = [word for word, _ in due_reviews[:limit]]
-    remaining_slots = limit - len(review_take)
-    new_quota = max(0, daily_new_limit - stats["new_today"])
-    new_words = sorted(
-        (word for word in words if not word.get("srs")),
-        key=lambda word: word.get("created_at", ""),
-    )
-    new_take = new_words[:min(remaining_slots, new_quota)]
-
-    cards = []
-    for word in review_take + new_take:
-        cards.append({
-            **word,
-            "is_new": not bool(word.get("srs")),
-            "predicted_intervals": _predicted_intervals(word.get("srs"), now),
-        })
-    return {"cards": cards, "stats": stats}
-
-
-@app.post("/api/words/{word_id}/review")
-def post_review(word_id: str, body: dict):
-    """记录一次评分并原子更新该单词的 FSRS 状态。"""
-    rating = body.get("rating")
-    if type(rating) is not int or rating not in (1, 2, 3, 4):
-        raise HTTPException(status_code=422, detail="rating 必须是 1、2、3 或 4")
-
-    now = datetime.now(CHINA_TZ)
-    with _write_lock:
-        data = load_words()
-        word = next((item for item in data["words"] if item["id"] == word_id), None)
-        if word is None:
-            raise HTTPException(status_code=404, detail="单词不存在")
-        if not word.get("definition", "").strip():
-            raise HTTPException(status_code=409, detail="缺少释义的单词暂不能复习")
-
-        previous = word.get("srs")
-        if previous:
-            try:
-                last_review = _parse_review_time(previous["last_review_at"])
-                elapsed_days = max((now - last_review).total_seconds() / 86400, 0.0)
-                difficulty, stability = fsrs.update(
-                    float(previous["d"]),
-                    float(previous["s"]),
-                    rating,
-                    elapsed_days,
-                )
-                first_review_at = previous.get(
-                    "first_review_at", previous["last_review_at"]
-                )
-                reps = int(previous.get("reps", 0)) + 1
-                lapses = int(previous.get("lapses", 0)) + (1 if rating == 1 else 0)
-            except (KeyError, TypeError, ValueError) as exc:
-                raise HTTPException(status_code=409, detail="该单词的复习状态已损坏") from exc
-        else:
-            difficulty = fsrs.initial_difficulty(rating)
-            stability = fsrs.initial_stability(rating)
-            first_review_at = now.isoformat()
-            reps = 1
-            lapses = 1 if rating == 1 else 0
-
-        interval_days = fsrs.next_interval(stability)
-        due_at = now + timedelta(days=interval_days)
-        word["srs"] = {
-            "d": difficulty,
-            "s": stability,
-            "first_review_at": first_review_at,
-            "last_review_at": now.isoformat(),
-            "due_at": due_at.isoformat(),
-            "reps": reps,
-            "lapses": lapses,
-        }
-        word.setdefault("review_history", []).append({"id": uuid.uuid4().hex, "rating": rating, "at": now.isoformat()})
-        save_words(data)
-
-    card = {
-        **word,
-        "is_new": False,
-        "predicted_intervals": _predicted_intervals(word["srs"], now),
-    }
-    interval_seconds = interval_days * 86400
-    return {
-        "word": word,
-        "card": card,
-        "next_interval_seconds": interval_seconds,
-        "next_interval": fsrs.format_interval(interval_seconds),
-    }
-
-
-# 注意：/api/words/export 和 /api/words/enrich-missing 路由必须在
-# /api/words/{word_id} 之前，否则会被当成 word_id 匹配。
-@app.get("/api/words/export")
-def export_words(
-    format: str = Query(default="json"),
-    q: str = Query(default=""),
-    date: str = Query(default=""),
-    sort: str = Query(default=""),
-    notebook_id: str = "",
-):
-    data = load_words()
-    data["words"] = _book_words(data, notebook_id)
-    words = _filter_words(data, q, date, sort)
-    today = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
-
-    if format == "csv":
-        out = io.StringIO()
-        out.write("﻿")  # UTF-8 BOM — Excel 看这个知道是 UTF-8,不会按 GBK 误读
-        w = csv.writer(out)
-        w.writerow(["单词", "音标", "释义", "例句", "日期"])
-        for item in words:
-            w.writerow([item["word"], item["phonetic"], item["definition"], item["example"], item["created_at"][:10]])
-        out.seek(0)
-        return StreamingResponse(
-            iter([out.getvalue().encode("utf-8")]),
-            media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f"attachment; filename=vocabulary-{today}.csv"},
-        )
-
-    if format == "pdf":
-        use_cjk = _CJK_FONT_PATH is not None
-        pdf_bytes = _build_pdf(words, today, use_cjk, _CJK_FONT_PATH)
-        return StreamingResponse(
-            io.BytesIO(pdf_bytes),
-            media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=vocabulary-{today}.pdf"},
-        )
-
-    # 默认 JSON
-    out = io.StringIO()
-    json.dump({"words": words, "notebooks": data["notebooks"], "exported_at": now_iso()}, out, ensure_ascii=False, indent=2)
-    out.seek(0)
-    return StreamingResponse(
-        iter([out.getvalue()]),
-        media_type="application/json; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename=vocabulary-{today}.json"},
-    )
-
-
-async def _enqueue_enrich_batch(items: list) -> None:
-    """送入 enrich 队列并累加 batch 计数器。
-
-    仅做"入队 + 累加"，不做重置。重置由调用方在合适的时机显式调用
-    `_maybe_reset_batch_if_idle()`，这样 enrich-missing 即使在 0 missing 提前
-    return 的路径上也能把上一批残留状态清掉。
-
-    调用方必须在同一协程内连续调用（不要跨 await），这样检查 + 入队 + 计数的
-    同步段不会被 worker 协程打断，竞态安全。
-    """
-    global _enrich_batch_total
-    if not items:
-        return
-    now = asyncio.get_event_loop().time()
-    for word_id, word_text in items:
-        _enriching_ids[word_id] = now
-        await _enrich_queue.put((word_id, word_text))
-    _enrich_batch_total += len(items)
-
-
-def _maybe_reset_batch_if_idle() -> None:
-    """若 worker 空闲 + 队列空 + 上一批已结束，重置 batch 计数器。
-
-    同步函数：调用方必须在 _enrich_queue.put 之前同一同步段内执行，竞态安全。
-    """
-    global _enrich_batch_total, _enrich_batch_done
-    if not _enrich_current and _enrich_queue.qsize() == 0 and _enrich_batch_total > 0:
-        _enrich_batch_total = 0
-        _enrich_batch_done = 0
-
-
-@app.post("/api/words/enrich-missing")
-async def enrich_missing(notebook_id: str = ""):
-    """扫描缺失 definition 的单词，跳过冷却期内已完成/进行中的。"""
-    # 入口处先尝试重置上一批残留状态 — 即使下面 0 missing 提前 return，
-    # 也能让 batch_total/batch_done 清零，避免污染后续观察。
-    _maybe_reset_batch_if_idle()
-    now = asyncio.get_event_loop().time()
-    data = load_words()
-    data["words"] = _book_words(data, notebook_id)
-    missing = [
-        w for w in data["words"]
-        if not w.get("definition", "").strip()
-        and _enriching_ids.get(w["id"], 0) + _ENRICH_COOLDOWN < now
-    ]
-    if not missing:
-        in_cooldown = sum(
-            1 for w in data["words"]
-            if not w.get("definition", "").strip()
-            and _enriching_ids.get(w["id"], 0) + _ENRICH_COOLDOWN >= now
-        )
-        msg = f"没有需要补全的单词" if not in_cooldown else f"{in_cooldown} 个单词正在补全中或刚尝试过，请稍后"
-        return {"enriched": 0, "message": msg}
-
-    await _enqueue_enrich_batch([(w["id"], w["word"]) for w in missing])
-
-    return {
-        "enriched": len(missing),
-        "word_ids": [w["id"] for w in missing],
-        "message": f"已加入 {len(missing)} 个单词到补全队列，逐个处理中",
-    }
-
-
-@app.get("/api/enrich/progress")
-def enrich_progress():
-    """返回当前 enrichment 队列进度"""
-    queue_size = _enrich_queue.qsize() if _enrich_queue else 0
-    data = load_words()
-    total_missing = sum(
-        1 for w in data["words"]
-        if not w.get("definition", "").strip()
-    )
-    return {
-        "queue_size": queue_size,
-        "current_word": _enrich_current,
-        "batch_total": _enrich_batch_total,
-        "batch_done": _enrich_batch_done,
-        "total_missing": total_missing,
-        "is_processing": _enrich_current is not None,
-    }
-
-
-@app.get("/api/words/{word_id}")
-def get_word(word_id: str):
-    data = load_words()
-    for w in data["words"]:
-        if w["id"] == word_id:
-            return {"word": w}
-    raise HTTPException(status_code=404, detail="单词不存在")
-
-
-@app.post("/api/words")
-async def create_word(body: dict):
-    word_text = _text(body, "word", limit=200)
-    if not word_text:
-        raise HTTPException(status_code=422, detail="单词不能为空")
-    with _write_lock:
-        data = load_words()
-        notebook_id = _text(body, "notebook_id", "default", limit=200)
-        if not notebook_id:
-            raise HTTPException(422, "请选择保存到的单词本")
-        scoped = _book_words(data, notebook_id)
-        if any(w["word"].casefold() == word_text.casefold() for w in scoped):
-            raise HTTPException(409, f"「{word_text}」已在这个单词本中")
-        word_id = uuid.uuid4().hex
-        word_obj = {"id": word_id, "word": word_text, "notebook_id": notebook_id,
-                    "definition": _text(body, "definition"), "phonetic": _text(body, "phonetic"),
-                    "example": _text(body, "example"), "created_at": now_iso()}
-        data["words"].append(word_obj)
-        save_words(data)
-
-    # 送入补全队列，后台串行处理（持续累加，不重置 — 用户显式补全缺失才是新一批）
-    if not word_obj["definition"] and _enrich_queue is not None:
-        await _enqueue_enrich_batch([(word_id, word_text)])
-
-    return {"word": word_obj}
-
-
-async def _enrich_worker():
-    """单 worker 从队列串行取任务，逐个调用 Ollama，避免并发排队超时"""
-    global _enrich_current, _enrich_batch_done
-    import logging
-    logger = logging.getLogger("uvicorn")
-    logger.warning("[enrich-worker] started")
-    while True:
-        word_id, word_text = await _enrich_queue.get()
-        _enrich_current = word_text
-        logger.warning(f"[enrich-worker] picked: {word_text!r} id={word_id}")
-        try:
-            current_data = load_words()
-            current_word = next((w for w in current_data["words"] if w["id"] == word_id), None)
-            if current_word is None:
-                continue
-            book = next((b for b in current_data["notebooks"] if b["id"] == current_word.get("notebook_id")), {})
-            notebook_id = current_word.get("notebook_id", "default")
-            context = book.get("name", "") + ": " + book.get("description", "")
-            phonetic, definition, example = await enrich_word(word_text, context)
-            if not phonetic and not definition and not example:
-                # 全空响应。词组(空格)静默不打扰 — 可能是 deepseek 对该词组不熟;
-                # 单个词推 toast 提示 — 可能是拼错/不存在/网络失败。
-                logger.warning(f"[enrich] {word_text} — deepseek 返回空")
-                if " " not in word_text and _event_queue is not None:
-                    await _event_queue.put({
-                        "type": "enrich_failed",
-                        "word_id": word_id,
-                        "word": word_text,
-                        "reason": "AI 未返回有效内容，请检查模型配置或手动填写释义",
-                    })
-                _enriching_ids.pop(word_id, None)
-                continue
-
-            # 后处理校验：拦截拼写错/中文例句/词性误标
-            ok, reason = _enrich_post_check(word_text, phonetic, definition, example)
-            if not ok:
-                logger.warning(f"[enrich-check] {word_text} — 拒绝写回: {reason}")
-                if _event_queue is not None:
-                    await _event_queue.put({
-                        "type": "enrich_failed",
-                        "word_id": word_id,
-                        "word": word_text,
-                        "reason": reason,
-                    })
-                _enriching_ids.pop(word_id, None)
-                continue
-
-            written = None
-            with _write_lock:
-                data = load_words()
-                for w in data["words"]:
-                    if w["id"] == word_id and w["word"] == word_text:
-                        current_book = next((b for b in data["notebooks"] if b["id"] == w.get("notebook_id")), {})
-                        current_context = current_book.get("name", "") + ": " + current_book.get("description", "")
-                        if w.get("notebook_id", "default") != notebook_id or current_context != context:
-                            break  # Never write an answer generated for a different course.
-                        if phonetic and not w.get("phonetic"):
-                            w["phonetic"] = phonetic
-                        if definition and not w.get("definition"):
-                            w["definition"] = definition
-                        if example and not w.get("example"):
-                            w["example"] = example
-                        save_words(data)
-                        written = {key: w[key] for key in ("phonetic", "definition", "example")}
-                        break
-
-            _enrich_batch_done += 1
-            if written is None:
-                reason = "单词或课程信息已更改，旧补全结果未写入，请重新补全。"
-                _enriching_ids.pop(word_id, None)
-                if _event_queue is not None:
-                    await _event_queue.put({"type": "enrich_failed", "word_id": word_id,
-                                            "word": word_text, "reason": reason})
-                continue
-            if written is not None and _event_queue is not None:
-                await _event_queue.put({
-                    "type": "enriched",
-                    "word_id": word_id,
-                    **written,
-                })
-        except Exception as e:
-            # 外层保护:任何意外异常都不让 worker 死,记录后继续下一个
-            logger.exception(f"[enrich-worker] UNCAUGHT EXCEPTION: {e}")
-            import asyncio as _aio
-            await _aio.sleep(1)
-        finally:
-            _enriching_ids.pop(word_id, None)
-            _enrich_current = None
-            _enrich_queue.task_done()
-
-
-def _enrich_post_check(word: str, phonetic: str, definition: str, example: str) -> tuple[bool, str]:
-    """后处理校验 — 返回 (ok, reason)。
-
-    三道闸:拼写(pyenchant) / 例句语种(langdetect) / 释义 POS 行头(纯正则)。
-    任一失败 → 严格模式:不写回,清冷却,推 SSE enrich_failed 事件。
-    库未装时优雅降级(log warning 后跳过该闸)。
-    """
-    import logging
-    logger = logging.getLogger("uvicorn")
-
-    # 1. 拼写 — 拦截 conffin/cublic/fivre/weav/undeter 这类
-    # 词组(空格分隔)按分词查,避免 "bottle stoppers" 整串被误拒
-    try:
-        import enchant
-        d = enchant.Dict("en_US")
-        if " " in word:
-            bad = [p for p in word.split() if not d.check(p)]
-            if bad:
-                return False, f"词组中分词拼写错 {bad}: {word!r}"
-        else:
-            if not d.check(word):
-                return False, f"word 不在英语词典(疑似拼写错): {word!r}"
-    except ImportError:
-        pass  # pyenchant 未装 — 降级跳过
-    except Exception as e:
-        logger.warning(f"[enrich-check] {word} — 拼写检查异常: {type(e).__name__}: {e}")
-
-    # 2. 例句含中文字符 → 拦截(algebra 中文例句这类)
-    # 不做通用语种检测:langdetect 在 < 10 词的例句上误判率 30%+,
-    # 会把短英文误判为 ro/af/so 等。直接看是否含中文更稳。
-    if example and example.strip() and re.search(r"[一-鿿]", example):
-        return False, f"例句包含中文字符: {example!r}"
-
-    # 3. 释义每行以合法 POS 开头 — 拦截 divergent n. / intricate vt. / 冷门义项
-    POS = {"vt.", "vi.", "n.", "adj.", "adv.", "prep.", "conj.", "pron."}
-    for line in (definition or "").split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        if not any(line.startswith(p) for p in POS):
-            return False, f"释义行不以 POS 开头: {line!r}"
-
-    return True, ""
-
-
-@app.put("/api/words/{word_id}")
-def update_word(word_id: str, body: dict):
-    with _write_lock:
-        data = load_words()
-        for w in data["words"]:
-            if w["id"] == word_id:
-                new_word = _text(body, "word", w["word"], limit=200)
-                notebook_id = _text(body, "notebook_id", w.get("notebook_id", "default"), limit=200)
-                if not notebook_id:
-                    raise HTTPException(422, "请选择保存到的单词本")
-                scoped = _book_words(data, notebook_id)
-                if not new_word:
-                    raise HTTPException(422, "单词不能为空")
-                if any(other["id"] != word_id and other["word"].casefold() == new_word.casefold() for other in scoped):
-                    raise HTTPException(409, "目标单词本中已存在该单词")
-                w.update(word=new_word, notebook_id=notebook_id)
-                for field in ("definition", "phonetic", "example"):
-                    if field in body:
-                        w[field] = _text(body, field)
-                save_words(data)
-                return {"word": w}
-    raise HTTPException(status_code=404, detail="单词不存在")
-
-
-@app.delete("/api/words/{word_id}")
-def delete_word(word_id: str):
-    with _write_lock:
-        data = load_words()
-        before = len(data["words"])
-        data["words"] = [w for w in data["words"] if w["id"] != word_id]
-        if len(data["words"]) == before:
-            raise HTTPException(status_code=404, detail="单词不存在")
-        save_words(data)
-    return {"ok": True}
-
-
-# ─── 导出辅助函数 ─────────────────────────────────────────
-
-def _filter_words(data: dict, q: str, date: str, sort: str = "", letter: str = "") -> list:
-    words = data["words"]
-    if date:
-        words = [w for w in words if w["created_at"].startswith(date)]
-    if q:
-        ql = q.lower()
-        words = [w for w in words if ql in w["word"].lower() or ql in w["definition"].lower()]
-    if letter:
-        l = letter.lower()
-        words = [w for w in words if w["word"].lower().startswith(l)]
-    if sort == "alpha_asc":
-        words = sorted(words, key=lambda w: w["word"].lower())
-    elif sort == "alpha_desc":
-        words = sorted(words, key=lambda w: w["word"].lower(), reverse=True)
-    return words
+def _word_operation_ids(data, word_id):
+    return frozenset(op["id"] for op in data["_sync"]["operations"].values()
+                     if op["entity"] == "word" and op["entity_id"] == word_id)
 
 
 # ─── 静态文件（生产模式）──────────────────────────────────
@@ -1616,7 +1643,7 @@ def get_lan_ip() -> str:
 if __name__ == "__main__":
     import uvicorn
 
-    host = "127.0.0.1"
+    host = "0.0.0.0"
     port = 1400
     lan_ip = get_lan_ip()
 
@@ -1624,7 +1651,9 @@ if __name__ == "__main__":
     print("  词汇笔记本  Vocabulary Notebook")
     print("═" * 52)
     print(f"  本地访问  →  http://localhost:{port}")
+    if lan_ip:
+        print(f"  局域网    →  http://{lan_ip}:{port}")
     print("═" * 52)
     print()
 
-    uvicorn.run(app, host=host, port=port, log_level="warning", proxy_headers=False)
+    uvicorn.run(app, host=host, port=port, log_level="warning")

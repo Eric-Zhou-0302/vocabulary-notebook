@@ -42,7 +42,7 @@ export default function CloudStatus() {
     ? `${status.pending} 条变更待${status.provider === 'drive_folder' ? '写入文件夹；实际上传请查看 Drive 桌面版' : '同步'}${status.last_synced_at ? ` · 上次 ${new Date(status.last_synced_at).toLocaleTimeString()}` : ''}`
     : '连接 Google Drive 后，两台电脑可同步词汇与学习记录')
   return <aside className={`cloud-status ${problem ? 'has-error' : status?.connected ? 'connected' : ''}`} aria-label="云端同步状态">
-    <Link to="/settings" className="cloud-status-label" title={detail}>
+    <Link to="/sync-settings" className="cloud-status-label" title={detail}>
       <span className="status-dot" aria-hidden="true" />
       <span aria-live="polite">{label}{!problem && !syncing && status?.connected && status.pending > 0 ? ` · 待处理 ${status.pending}` : ''}</span>
     </Link>

@@ -1,13 +1,5 @@
 const BASE = '/api'
 
-export function activeNotebookId() {
-  return localStorage.getItem('vocabulary-notebook-id') ?? 'default'
-}
-
-function scoped(url) {
-  return `${url}${url.includes('?') ? '&' : '?'}notebook_id=${encodeURIComponent(activeNotebookId())}`
-}
-
 async function request(url, options = {}) {
   const res = await fetch(BASE + url, {
     headers: { 'Content-Type': 'application/json' },
@@ -15,8 +7,9 @@ async function request(url, options = {}) {
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
-    const error = new Error(err.detail || '请求失败')
+    const error = new Error(typeof err.detail === 'string' ? err.detail : err.detail?.message || '请求失败')
     error.status = res.status
+    error.details = err.detail
     throw error
   }
   return res
@@ -24,12 +17,12 @@ async function request(url, options = {}) {
 
 export async function fetchWords({ q = '', date = '', page = 1, size = 20, sort = '', letter = '' } = {}) {
   const params = new URLSearchParams({ q, date, page, size, sort, letter })
-  const res = await request(scoped(`/words?${params}`))
+  const res = await request(`/words?${params}`)
   return res.json()
 }
 
 export async function fetchDates() {
-  const res = await request(scoped('/dates'))
+  const res = await request('/dates')
   return res.json()
 }
 
@@ -38,10 +31,10 @@ export async function fetchWord(id) {
   return res.json()
 }
 
-export async function createWord(word, definition = '', notebook_id = activeNotebookId() || 'default') {
+export async function createWord(word, definition = '') {
   const res = await request('/words', {
     method: 'POST',
-    body: JSON.stringify({ word, definition, notebook_id }),
+    body: JSON.stringify({ word, definition }),
   })
   return res.json()
 }
@@ -60,22 +53,22 @@ export async function deleteWord(id) {
 
 export function exportUrl(format, { q = '', date = '', sort = '' } = {}) {
   const params = new URLSearchParams({ format, q, date, sort })
-  return BASE + scoped(`/words/export?${params}`)
+  return `${BASE}/words/export?${params}`
 }
 
 export async function enrichMissing() {
-  const res = await request(scoped('/words/enrich-missing'), { method: 'POST' })
+  const res = await request('/words/enrich-missing', { method: 'POST' })
   return res.json()
 }
 
 export async function fetchReviewStats() {
-  const res = await request(scoped('/review/stats'))
+  const res = await request('/review/stats')
   return res.json()
 }
 
 export async function fetchReviewDue(limit = 20) {
   const params = new URLSearchParams({ limit: String(limit) })
-  const res = await request(scoped(`/review/due?${params}`))
+  const res = await request(`/review/due?${params}`)
   return res.json()
 }
 
@@ -90,6 +83,5 @@ export async function rateWord(wordId, rating) {
 }
 
 export async function libraryRequest(path, method = 'GET', body) {
-  const result = await request(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
-  return result.json()
+  return (await request(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json()
 }

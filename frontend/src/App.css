@@ -1,51 +1,6 @@
 /* ─── Reset & Variables ──────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-.library-statusbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 18px; margin: 12px 0 28px; padding: 10px 0; border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: 12px; }
-.book-toolbar, .book-choice, .status-services, .cloud-status, .cloud-status-label { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.book-toolbar { flex-wrap: wrap; }
-.book-choice label { font-size: 12px; white-space: nowrap; }
-.book-choice select { max-width: 190px; min-width: 0; padding: 4px 24px 4px 8px; font-size: 12px; border-color: transparent; background-color: transparent; color: var(--text-dim); text-overflow: ellipsis; }
-.book-choice select:hover, .book-choice select:focus { border-color: var(--border-light); color: var(--text); }
-.book-description { color: var(--text-dim); font-size: 13px; }
-.book-actions { position: relative; }
-.book-actions summary, .status-action { color: var(--text-dim); cursor: pointer; font: inherit; font-size: 12px; padding: 4px; }
-.book-actions summary:hover, .status-action:hover:not(:disabled) { color: var(--accent); }
-.book-actions-menu { position: absolute; left: 0; top: calc(100% + 8px); z-index: 30; width: min(260px, 72vw); padding: 10px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--surface-raised); box-shadow: var(--shadow-card); }
-.book-actions-menu p { padding: 4px 8px 10px; }
-.book-actions-menu button { display: block; width: 100%; padding: 9px 8px; background: none; border: 0; color: var(--text); text-align: left; font: inherit; cursor: pointer; border-radius: 4px; }
-.book-actions-menu button:hover { background: var(--surface); }
-.status-services { flex-wrap: wrap; gap: 6px 16px; }
-.cloud-status { flex-wrap: wrap; }
-.cloud-status-label:hover { color: var(--text); }
-.status-dot { width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: var(--text-dim); }
-.cloud-status.connected .status-dot { background: var(--success); }
-.cloud-status.has-error .status-dot { background: var(--error); }
-.status-action { border: 0; background: none; text-decoration: underline; text-underline-offset: 3px; }
-.status-action:disabled { opacity: 0.5; cursor: wait; }
-.cloud-warning { flex-basis: 100%; color: var(--error); max-width: 300px; overflow-wrap: anywhere; }
-.book-description { flex-basis: 100%; overflow-wrap: anywhere; }
-.book-overlay { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; background: #0009; }
-.book-dialog { width: min(100%, 480px); max-height: 90vh; overflow-y: auto; padding: 28px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-modal); }
-.book-dialog h2 { margin-bottom: 20px; }
-.form-group textarea, .form-group select { width: 100%; }
-textarea { font: inherit; line-height: 1.6; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; resize: vertical; }
-select { max-width: 100%; }
-.settings-card { margin-top: 22px; padding: 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
-.settings-card h3 { margin-bottom: 12px; }
-.settings-card p { margin: 12px 0; }
-.settings-card a:not(.btn), .app-footer a { text-decoration: underline; text-underline-offset: 3px; }
-.setup-steps { padding-left: 22px; margin: 18px 0; }
-.setup-steps li { margin-bottom: 10px; }
-.file-action { display: block; font-size: 14px; margin: 20px 0; }
-.file-action input { display: block; margin-top: 10px; max-width: 100%; color: var(--text); }
-.settings-note { color: var(--text-dim); font-size: 13px; }
-.settings-error { color: var(--error); }
-.settings-message { margin: 20px 0; border-left: 3px solid var(--accent); padding: 12px 16px; background: var(--surface); }
-.app-footer { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 12px; }
-
-@media (max-width: 600px) { .settings-card { padding: 18px; } }
-
 :root, [data-theme="dark"] {
   --bg: #1a1817;
   --ink: #1a1817;
@@ -130,14 +85,25 @@ a { color: inherit; text-decoration: none; }
 
 .app-header {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 16px;
-  padding: 28px 0 22px;
+  padding: 28px 0 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 32px;
+  position: relative;
 }
-.app-tagline { margin-top: 2px; font-size: 12px; color: var(--text-dim); }
-.app-utilities { display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--text-dim); white-space: nowrap; }
-.app-utilities a:hover, .app-utilities a[aria-current="page"] { color: var(--accent); }
+
+/* 标题下方装饰线 — 活字排版常见的双线收尾 */
+.app-header::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: var(--border);
+  opacity: 0.4;
+}
 
 .app-title {
   font-family: var(--font-display);
@@ -150,48 +116,32 @@ a { color: inherit; text-decoration: none; }
 .app-title a:hover { color: var(--accent); }
 
 .app-nav {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  padding: 6px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  display: flex;
+  gap: 28px;
+  font-size: 14px;
+  letter-spacing: 0.03em;
 }
 .app-nav a {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 9px;
-  min-height: 54px;
-  padding: 10px 8px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: var(--text);
-  transition: background 0.2s, color 0.2s, border-color 0.2s;
-  font-size: 16px;
-  font-weight: 600;
-  white-space: nowrap;
+  color: var(--text-dim);
+  padding-bottom: 3px;
+  border-bottom: 1px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  font-weight: 500;
 }
-.app-nav svg { width: 22px; height: 22px; flex-shrink: 0; }
-.app-nav a:hover { background: var(--surface-raised); border-color: var(--border-light); }
+.app-nav a:hover { color: var(--text); }
 .app-nav a.active {
-  color: var(--ink);
-  background: var(--accent);
-  border-color: var(--accent);
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
-.app-nav a:focus-visible, .app-utilities a:focus-visible, .library-statusbar a:focus-visible, .library-statusbar button:focus-visible, .book-actions summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 .nav-badge {
-  color: var(--text);
-  background: var(--bg);
-  padding: 0 6px;
-  border-radius: 20px;
-  font-size: 11px;
+  color: var(--accent);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.app-nav a.active .nav-badge { color: var(--ink); background: #ffffff50; }
 
 .app-main { min-height: 60vh; }
 
@@ -308,7 +258,6 @@ a { color: inherit; text-decoration: none; }
 }
 
 input[type="text"],
-input[type="password"],
 textarea {
   width: 100%;
   padding: 10px 0;
@@ -329,13 +278,11 @@ textarea {
 }
 
 input[type="text"]:focus,
-input[type="password"]:focus,
 textarea:focus {
   border-bottom-color: var(--accent);
 }
 
 input[type="text"]::placeholder,
-input[type="password"]::placeholder,
 textarea::placeholder {
   color: var(--text-muted);
   font-style: italic;
@@ -1097,19 +1044,8 @@ select option { background: var(--surface); color: var(--text); }
 
 @media (max-width: 640px) {
   .app { padding-inline: 16px; }
-  .app-header { padding: 22px 0 18px; }
-  .app-title { font-size: 23px; }
-  .app-utilities { gap: 10px; }
-  .app-nav { gap: 4px; padding: 4px; }
-  .app-nav a { min-height: 48px; gap: 6px; font-size: 14px; padding-inline: 5px; }
-  .app-nav svg { width: 18px; height: 18px; }
-  .library-statusbar { gap: 6px; margin-bottom: 22px; }
-  .book-toolbar { width: 100%; }
-  .book-choice { flex: 1; }
-  .book-choice select { flex: 1; max-width: none; width: 0; }
-  .book-actions { margin-left: auto; }
-  .book-actions-menu { left: auto; right: 0; }
-  .status-services { width: 100%; justify-content: space-between; }
+  .app-header { align-items: flex-start; gap: 18px; }
+  .app-nav { flex-wrap: wrap; justify-content: flex-end; gap: 12px 18px; }
   .review-header { align-items: flex-start; flex-direction: column; }
   .review-stats { width: 100%; justify-content: space-between; }
   .review-stats div { text-align: left; }
@@ -1372,6 +1308,7 @@ select option { background: var(--surface); color: var(--text); }
   gap: 5px;
   font-size: 11px;
   letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--text-muted);
 }
 .model-dot {
@@ -1401,6 +1338,10 @@ select option { background: var(--surface); color: var(--text); }
   color: var(--accent);
   border-color: var(--accent);
 }
+
+.added-words { margin-top: 32px; }
+.added-words h3 { margin-bottom: 12px; }
+.added-words-hint { color: var(--text-muted); font-size: 13px; margin: 8px 0 16px; }
 
 /* ─── Scrollbar ──────────────────────────── */
 ::-webkit-scrollbar { width: 8px; }
@@ -1454,3 +1395,18 @@ select option { background: var(--surface); color: var(--text); }
 .settings-success { color: var(--success); margin-top: 16px; font-size: 13px; }
 .model-status.off { color: var(--error); }
 @media (max-width: 520px) { .provider-options { grid-template-columns: 1fr; gap: 10px; } .model-settings .provider-option { padding: 14px; } .settings-panel { padding: 18px 14px; } }
+
+.cloud-status { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:12px 0 24px; font-size:12px; color:var(--text-dim); }
+.cloud-status-label { display:flex; align-items:center; gap:6px; }
+.status-dot { width:6px; height:6px; border-radius:50%; background:var(--text-dim); }
+.cloud-status.connected .status-dot { background:var(--success); }
+.cloud-status.has-error .status-dot,.cloud-warning { color:var(--error); }
+.status-action { border:0; background:none; color:var(--text-dim); text-decoration:underline; cursor:pointer; }
+.settings-card { margin-top:22px; padding:24px; border:1px solid var(--border); border-radius:12px; background:var(--surface); }
+.settings-card h3,.settings-card p { margin-bottom:12px; }
+.setup-steps { padding-left:22px; margin:18px 0; }
+.file-action { display:block; margin:20px 0; }
+.file-action input { display:block; margin-top:10px; max-width:100%; }
+.settings-note { color:var(--text-dim); font-size:13px; }
+.settings-error { color:var(--error); }
+.settings-message { margin:20px 0; padding:12px; border-left:3px solid var(--accent); }
