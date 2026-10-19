@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
+import { BookPicker, useBooks } from './Books'
 import WordList from './pages/WordList'
 import WordNew from './pages/WordNew'
 import WordDetail from './pages/WordDetail'
@@ -13,7 +14,8 @@ import HelpModal from './components/HelpModal'
 
 export default function App() {
   const location = useLocation()
-  const dueCount = useDueCount()
+  const { active } = useBooks()
+  const dueCount = useDueCount(active)
   const searchInputRef = useRef(null)
   const [helpOpen, setHelpOpen] = useState(false)
   const toggleHelp = useCallback(() => setHelpOpen(o => !o), [])
@@ -43,8 +45,9 @@ export default function App() {
           <ThemeToggle />
         </nav>
       </header>
+      <BookPicker />
       <main className="app-main">
-        <Routes>
+        <Routes key={location.pathname === '/settings' ? 'settings' : location.pathname.startsWith('/word/') && location.pathname !== '/word/new' ? location.pathname : active}>
           <Route path="/" element={<WordList searchInputRef={searchInputRef} />} />
           <Route path="/word/new" element={<WordNew />} />
           <Route path="/word/:id" element={<WordDetail />} />

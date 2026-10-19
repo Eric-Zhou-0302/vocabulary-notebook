@@ -481,29 +481,36 @@ _write_lock = threading.RLock()
 
 
 def load_words() -> dict:
-    """读取 words.json，不存在时初始化，损坏时备份并返回空数据"""
+    """Read local notebooks; never replace a damaged library with an empty one."""
     with _write_lock:
-        if not DATA_FILE.exists():
-            save_words({"words": []})
-            return {"words": []}
-        try:
-            return json.loads(DATA_FILE.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            backup = DATA_FILE.with_suffix(f".json.bak.{datetime.now().strftime('%Y%m%d_%H%M%S')}")
-            DATA_FILE.rename(backup)
-            save_words({"words": []})
-            return {"words": []}
+        if DATA_FILE.exists():
+            data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+            if not isinstance(data, dict) or not isinstance(data.get("words"), list):
+                raise ValueError("词库格式无效，原文件已保留")
+        else:
+            data = {"words": []}
+        data.setdefault("notebooks", [{"id": "default", "name": "默认单词本", "description": "原词库与日常积累"}])
+        return data
+
+
 
 
 def save_words(data: dict) -> None:
     """原子写入：先写临时文件再替换，防止并发写丢数据和写入中断损坏"""
     with _write_lock:
+        if DATA_FILE.exists():
+            original = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+            if "notebooks" not in original:
+                backup = DATA_FILE.with_suffix(DATA_FILE.suffix + ".pre-notebooks.bak")
+                if not backup.exists():
+                    backup.write_bytes(DATA_FILE.read_bytes())
         tmp = DATA_FILE.with_suffix(".tmp")
         tmp.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         tmp.replace(DATA_FILE)
+
 
 
 def now_iso() -> str:
@@ -603,7 +610,7 @@ def _review_stats_for(words: list[dict], now: datetime, daily_new_limit: int) ->
     }
 
 
-async def enrich_word(word: str) -> tuple[str, str, str]:
+async def enrich_word(word: str, context: str = "") -> tuple[str, str, str]:
     """调用配置好的 Provider 补充音标、释义和例句，返回 (phonetic, definition, example)。服务或格式错误抛出异常；仅明确的三字段空响应表示未识别词汇。"""
     import logging
     logger = logging.getLogger("uvicorn")
@@ -684,6 +691,8 @@ primary meaning first (e.g., "pharmacy" — "药店" comes before
 
 Reply ONLY with a JSON object, no other text:
 {{"phonetic": "/.../", "definition": "n. 释义一，释义二\\nvt. 及物释义", "example": "..."}}'''
+    if context:
+        prompt = "Course context: " + context + "\n\n" + prompt
     try:
         if config.get_provider() == "ollama":
             ollama_cfg = config.get_ollama_config()
@@ -724,6 +733,7 @@ Reply ONLY with a JSON object, no other text:
         # Do not log provider responses, credentials or credential-bearing URLs.
         logger.warning("[enrich] provider unavailable: %s", type(exc).__name__)
         raise EnrichmentUnavailable("模型服务暂不可用，请检查配置、余额与网络后重试") from None
+
 
 
 # ─── API: SSE 事件流 ──────────────────────────────────────
@@ -856,6 +866,60 @@ async def health_check():
 
 # ─── API: 单词 CRUD ───────────────────────────────────────
 
+def _text(body, key, default="", limit=100000):
+    value = body.get(key, default)
+    if not isinstance(value, str) or len(value) > limit:
+        raise HTTPException(422, f"{key} 必须是长度不超过 {limit} 的文本")
+    return value.strip()
+
+
+def _book_words(data, notebook_id):
+    if notebook_id:
+        if not any(book["id"] == notebook_id for book in data["notebooks"]):
+            raise HTTPException(404, "单词本不存在，请重新选择")
+        return [word for word in data["words"] if word.get("notebook_id", "default") == notebook_id]
+    return data["words"]
+
+
+@app.get("/api/notebooks")
+def list_notebooks():
+    data = load_words()
+    return {"notebooks": [{**book, "word_count": len(_book_words(data, book["id"]))}
+                          for book in data["notebooks"]]}
+
+
+@app.post("/api/notebooks")
+def create_notebook(body: dict):
+    name = _text(body, "name", limit=80)
+    if not name:
+        raise HTTPException(422, "单词本名称不能为空")
+    with _write_lock:
+        data = load_words()
+        book = {"id": uuid.uuid4().hex, "name": name,
+                "description": _text(body, "description", limit=500), "created_at": now_iso()}
+        data["notebooks"].append(book)
+        save_words(data)
+    return {"notebook": book}
+
+
+@app.put("/api/notebooks/{notebook_id}")
+def update_notebook(notebook_id: str, body: dict):
+    with _write_lock:
+        data = load_words()
+        for book in data["notebooks"]:
+            if book["id"] == notebook_id:
+                name = _text(body, "name", book["name"], limit=80)
+                if not name:
+                    raise HTTPException(422, "单词本名称不能为空")
+                book.update(name=name, description=_text(body, "description", book.get("description", ""), limit=500))
+                for item in data["words"]:
+                    if item.get("notebook_id", "default") == notebook_id:
+                        _new_enrichment_candidates.pop(item["id"], None)
+                save_words(data)
+                return {"notebook": book}
+    raise HTTPException(404, "单词本不存在")
+
+
 @app.get("/api/words")
 def list_words(
     q: str = Query(default=""),
@@ -864,8 +928,10 @@ def list_words(
     size: int = Query(default=20, ge=1, le=10000),
     sort: str = Query(default=""),
     letter: str = Query(default=""),
+    notebook_id: str = "",
 ):
     data = load_words()
+    data["words"] = _book_words(data, notebook_id)
     # 先按 q+date+sort 过滤一次，用于计算 available_letters（不含 letter 自身的影响）
     pre_letter = _filter_words(data, q, date, sort)
     available_letters = sorted({
@@ -888,34 +954,37 @@ def list_words(
     }
 
 
+
 @app.get("/api/dates")
-def list_dates():
+def list_dates(notebook_id: str = ""):
     data = load_words()
     dates = sorted({
         w["created_at"][:10]
-        for w in data["words"]
+        for w in _book_words(data, notebook_id)
         if "created_at" in w
     }, reverse=True)
     return {"dates": dates}
 
 
+
 # ─── API: 间隔复习 ────────────────────────────────────────
 
 @app.get("/api/review/stats")
-def review_stats():
+def review_stats(notebook_id: str = ""):
     """返回导航角标和复习页需要的轻量统计。"""
     now = datetime.now(CHINA_TZ)
     daily_new_limit = config.get_srs_config()["daily_new_limit"]
-    return _review_stats_for(load_words()["words"], now, daily_new_limit)
+    return _review_stats_for(_book_words(load_words(), notebook_id), now, daily_new_limit)
+
 
 
 @app.get("/api/review/due")
-def review_due(limit: int = Query(default=20, ge=1, le=100)):
+def review_due(limit: int = Query(default=20, ge=1, le=100), notebook_id: str = ""):
     """返回一批到期卡片：逾期复习优先，再用新词填满剩余额度。"""
     now = datetime.now(CHINA_TZ)
     daily_new_limit = config.get_srs_config()["daily_new_limit"]
     words = [
-        word for word in load_words()["words"]
+        word for word in _book_words(load_words(), notebook_id)
         if word.get("definition", "").strip()
     ]
     stats = _review_stats_for(words, now, daily_new_limit)
@@ -949,6 +1018,7 @@ def review_due(limit: int = Query(default=20, ge=1, le=100)):
             "predicted_intervals": _predicted_intervals(word.get("srs"), now),
         })
     return {"cards": cards, "stats": stats}
+
 
 
 @app.post("/api/words/{word_id}/review")
@@ -1027,8 +1097,10 @@ def export_words(
     q: str = Query(default=""),
     date: str = Query(default=""),
     sort: str = Query(default=""),
+    notebook_id: str = "",
 ):
     data = load_words()
+    data["words"] = _book_words(data, notebook_id)
     words = _filter_words(data, q, date, sort)
     today = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
 
@@ -1057,13 +1129,14 @@ def export_words(
 
     # 默认 JSON
     out = io.StringIO()
-    json.dump({"words": words, "exported_at": now_iso()}, out, ensure_ascii=False, indent=2)
+    json.dump({"words": words, "notebooks": data["notebooks"], "exported_at": now_iso()}, out, ensure_ascii=False, indent=2)
     out.seek(0)
     return StreamingResponse(
         iter([out.getvalue()]),
         media_type="application/json; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename=vocabulary-{today}.json"},
     )
+
 
 
 async def _enqueue_enrich_batch(items: list) -> None:
@@ -1099,13 +1172,14 @@ def _maybe_reset_batch_if_idle() -> None:
 
 
 @app.post("/api/words/enrich-missing")
-async def enrich_missing():
+async def enrich_missing(notebook_id: str = ""):
     """扫描缺失 definition 的单词，跳过冷却期内已完成/进行中的。"""
     # 入口处先尝试重置上一批残留状态 — 即使下面 0 missing 提前 return，
     # 也能让 batch_total/batch_done 清零，避免污染后续观察。
     _maybe_reset_batch_if_idle()
     now = asyncio.get_event_loop().time()
     data = load_words()
+    data["words"] = _book_words(data, notebook_id)
     missing = [
         w for w in data["words"]
         if not w.get("definition", "").strip()
@@ -1127,6 +1201,7 @@ async def enrich_missing():
         "word_ids": [w["id"] for w in missing],
         "message": f"已加入 {len(missing)} 个单词到补全队列，逐个处理中",
     }
+
 
 
 @app.get("/api/enrich/progress")
@@ -1177,10 +1252,14 @@ async def create_word(body: dict):
 
     with _write_lock:
         data = load_words()
+        notebook_id = _text(body, "notebook_id", "default", limit=200)
+        if not notebook_id:
+            raise HTTPException(422, "请选择保存到的单词本")
+        scoped = _book_words(data, notebook_id)
         word_lower = word_text.lower()
 
         # 重复检测：同单词已存在时返回 409，附上已有记录供前端提示
-        for w in data["words"]:
+        for w in scoped:
             if w["word"].lower() == word_lower:
                 raise HTTPException(
                     status_code=409,
@@ -1190,6 +1269,7 @@ async def create_word(body: dict):
         word_id = uuid.uuid4().hex[:12]
         word_obj = {
             "id": word_id,
+            "notebook_id": notebook_id,
             "word": word_text,
             "definition": body.get("definition", "").strip(),
             "phonetic": "",
@@ -1208,6 +1288,7 @@ async def create_word(body: dict):
         await _enqueue_enrich_batch([(word_id, word_text)])
 
     return _word_response(word_obj)
+
 
 
 def _discard_unrecognized_new_word(word_id):
@@ -1249,7 +1330,13 @@ async def _enrich_worker():
             current_word = next((w for w in current_data["words"] if w["id"] == word_id), None)
             if current_word is None:
                 continue
-            phonetic, definition, example = await enrich_word(word_text)
+            current = next((w for w in load_words()["words"] if w["id"] == word_id), None)
+            if current is None:
+                continue
+            notebook_id = current.get("notebook_id", "default")
+            book = next(b for b in load_words()["notebooks"] if b["id"] == notebook_id)
+            context = book.get("name", "") + ": " + book.get("description", "")
+            phonetic, definition, example = await enrich_word(word_text, context)
             if not phonetic and not definition and not example:
                 await _reject_unrecognized(word_id, word_text)
                 _enrich_batch_done += 1
@@ -1279,6 +1366,9 @@ async def _enrich_worker():
                 data = load_words()
                 for w in data["words"]:
                     if w["id"] == word_id and w["word"] == word_text:
+                        book = next((b for b in data["notebooks"] if b["id"] == w.get("notebook_id", "default")), {})
+                        if w.get("notebook_id", "default") != notebook_id or book.get("name", "") + ": " + book.get("description", "") != context:
+                            break
                         if phonetic and not w.get("phonetic"):
                             w["phonetic"] = phonetic
                         if definition and not w.get("definition"):
@@ -1324,6 +1414,7 @@ async def _enrich_worker():
             _enriching_ids.pop(word_id, None)
             _enrich_current = None
             _enrich_queue.task_done()
+
 
 
 def _enrich_post_check(word: str, phonetic: str, definition: str, example: str) -> tuple[bool, str]:
@@ -1377,14 +1468,24 @@ def update_word(word_id: str, body: dict):
         data = load_words()
         for w in data["words"]:
             if w["id"] == word_id:
-                if "word" in body:
-                    w["word"] = body["word"].strip()
-                if "definition" in body:
-                    w["definition"] = body["definition"].strip()
-                save_words(data)
+                new_word = _text(body, "word", w["word"], limit=200)
+                notebook_id = _text(body, "notebook_id", w.get("notebook_id", "default"), limit=200)
+                if not notebook_id:
+                    raise HTTPException(422, "请选择保存到的单词本")
+                scoped = _book_words(data, notebook_id)
+                if not new_word:
+                    raise HTTPException(422, "单词不能为空")
+                if any(other["id"] != word_id and other["word"].casefold() == new_word.casefold() for other in scoped):
+                    raise HTTPException(409, "目标单词本中已存在该单词")
+                w.update(word=new_word, notebook_id=notebook_id)
+                for field in ("definition", "phonetic", "example"):
+                    if field in body:
+                        w[field] = _text(body, field)
                 _new_enrichment_candidates.pop(word_id, None)
+                save_words(data)
                 return {"word": w}
-        raise HTTPException(status_code=404, detail="单词不存在")
+    raise HTTPException(status_code=404, detail="单词不存在")
+
 
 
 @app.delete("/api/words/{word_id}")

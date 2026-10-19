@@ -288,3 +288,7 @@ cd frontend && npm run build
 ## License
 
 [MIT](https://opensource.org/licenses/MIT) © 2026 [Eric Zhou](https://ericzhou.net/)
+
+## 课程单词本
+
+可创建、命名并切换法律、金融等课程单词本，填写领域说明供 AI 参考；添加页选择保存目标。列表、日期、复习与导出按当前本筛选；全部单词本可跨本浏览。同词在不同本中可以有不同释义，详情可移动词条并保留学习记录。已有词库归入默认本，不需要云端账号。

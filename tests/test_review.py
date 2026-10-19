@@ -130,13 +130,13 @@ def test_review_rejects_invalid_rating_without_writing(isolated_words):
         app.post_review("target", {"rating": 5})
 
     assert exc_info.value.status_code == 422
-    assert app.load_words() == original
+    assert app.load_words()["words"] == original["words"]
 
     with pytest.raises(HTTPException) as float_exc_info:
         app.post_review("target", {"rating": 3.0})
 
     assert float_exc_info.value.status_code == 422
-    assert app.load_words() == original
+    assert app.load_words()["words"] == original["words"]
 
 
 def test_corrupt_srs_state_is_skipped_in_stats():
