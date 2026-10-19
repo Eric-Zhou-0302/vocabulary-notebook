@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from fpdf import FPDF
 
 import config
+from event_broadcast import EventBroadcast
 import fsrs
 
 # ─── App ──────────────────────────────────────────────────
@@ -40,7 +41,9 @@ async def lifespan(app: FastAPI):
     except RuntimeError as e:
         print(f"  [config] 配置错误：{e}")
         raise
-    _event_queue = asyncio.Queue()
+    _new_enrichment_candidates.clear()
+    _enrich_states.clear()
+    _event_queue = EventBroadcast()
     _enrich_queue = asyncio.Queue()
     worker_task = asyncio.create_task(_enrich_worker())
     backup_task = asyncio.create_task(_periodic_backup_loop())
@@ -88,7 +91,7 @@ async def _periodic_backup_loop():
             print(f"  [backup] failed: {type(e).__name__}: {e}")
 
 
-app = FastAPI(title="Vocabulary Notebook", lifespan=lifespan)
+app = FastAPI(title="Vocabulary Notebook", version="1.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -112,6 +115,15 @@ _event_queue = None
 _enrich_queue: Optional[asyncio.Queue] = None
 # word_id → 上次尝试时间戳，冷却期内不重复入队
 _enriching_ids: dict[str, float] = {}
+# Runtime status lets the add page recover missed SSE notifications without changing words.json.
+_enrich_states: dict[str, dict] = {}
+# Only unchanged entries created in this process can be automatically discarded.
+_new_enrichment_candidates: dict[str, dict] = {}
+
+
+class EnrichmentUnavailable(RuntimeError):
+    """Provider failures must never be interpreted as an invalid word."""
+
 _ENRICH_COOLDOWN = 300  # 秒
 # 进度追踪
 _enrich_current: Optional[str] = None
@@ -593,7 +605,7 @@ def _review_stats_for(words: list[dict], now: datetime, daily_new_limit: int) ->
 
 
 async def enrich_word(word: str) -> tuple[str, str, str]:
-    """调用配置好的 Provider 补充音标、释义和例句，返回 (phonetic, definition, example)。失败返回空串。"""
+    """调用配置好的 Provider 补充音标、释义和例句，返回 (phonetic, definition, example)。服务或格式错误抛出异常；仅明确的三字段空响应表示未识别词汇。"""
     import logging
     logger = logging.getLogger("uvicorn")
 
@@ -701,17 +713,18 @@ Reply ONLY with a JSON object, no other text:
 
         match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
         if not match:
-            logger.warning(f"[enrich] {word} — 响应中未找到 JSON 对象：{text[:200]}")
-            return "", "", ""
+            raise EnrichmentUnavailable("模型返回格式不完整，请重试补全")
         data = json.loads(match.group())
-        return (
-            data.get("phonetic", ""),
-            data.get("definition", ""),
-            data.get("example", ""),
-        )
-    except Exception as e:
-        logger.warning(f"[enrich] {word} — 请求失败：{type(e).__name__}: {e}")
-        return "", "", ""
+        fields = ("phonetic", "definition", "example")
+        if not isinstance(data, dict) or any(not isinstance(data.get(key), str) for key in fields):
+            raise EnrichmentUnavailable("模型返回格式不完整，请重试补全")
+        return tuple(data[key].strip() for key in fields)
+    except EnrichmentUnavailable:
+        raise
+    except Exception as exc:
+        # Do not log provider responses, credentials or credential-bearing URLs.
+        logger.warning("[enrich] provider unavailable: %s", type(exc).__name__)
+        raise EnrichmentUnavailable("模型服务暂不可用，请检查配置、余额与网络后重试") from None
 
 
 @app.get("/api/instance")
@@ -730,17 +743,19 @@ async def event_stream(request: Request):
     async def generate():
         if _event_queue is None:
             return
-        try:
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    event = await asyncio.wait_for(_event_queue.get(), timeout=15)
-                    yield f"data: {json.dumps(event)}\n\n"
-                except asyncio.TimeoutError:
-                    yield ": keepalive\n\n"
-        except asyncio.CancelledError:
-            pass
+        with _event_queue.subscribe() as events:
+            try:
+                yield ": connected\n\n"
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        event = await asyncio.wait_for(events.get(), timeout=15)
+                        yield f"data: {json.dumps(event)}\n\n"
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+            except asyncio.CancelledError:
+                pass
 
     return StreamingResponse(
         generate(),
@@ -1075,6 +1090,7 @@ async def _enqueue_enrich_batch(items: list) -> None:
     now = asyncio.get_event_loop().time()
     for word_id, word_text in items:
         _enriching_ids[word_id] = now
+        _enrich_states[word_id] = {"status": "queued"}
         await _enrich_queue.put((word_id, word_text))
     _enrich_batch_total += len(items)
 
@@ -1140,80 +1156,121 @@ def enrich_progress():
     }
 
 
+def _word_response(word: dict) -> dict:
+    state = {"status": "ready"} if word.get("definition") else _enrich_states.get(word["id"], {"status": "idle"})
+    return {"word": word, "enrichment": state}
+
+
 @app.get("/api/words/{word_id}")
 def get_word(word_id: str):
     data = load_words()
     for w in data["words"]:
         if w["id"] == word_id:
-            return {"word": w}
+            return _word_response(w)
     raise HTTPException(status_code=404, detail="单词不存在")
+
+
+def _normalize_new_word(text: str) -> str:
+    """Uppercase the English initial of a new entry without altering the remaining text."""
+    if text and "a" <= text[0] <= "z":
+        return text[0].upper() + text[1:]
+    return text
 
 
 @app.post("/api/words")
 async def create_word(body: dict):
-    word_text = body.get("word", "").strip()
+    word_text = _normalize_new_word(body.get("word", "").strip())
     if not word_text:
         raise HTTPException(status_code=422, detail="单词不能为空")
 
-    data = load_words()
-    word_lower = word_text.lower()
+    with _write_lock:
+        data = load_words()
+        word_lower = word_text.lower()
 
-    # 重复检测：同单词已存在时返回 409，附上已有记录供前端提示
-    for w in data["words"]:
-        if w["word"].lower() == word_lower:
-            raise HTTPException(
-                status_code=409,
-                detail=f"「{w['word']}」已存在",
-            )
+        # 重复检测：同单词已存在时返回 409，附上已有记录供前端提示
+        for w in data["words"]:
+            if w["word"].lower() == word_lower:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"message": f"「{w['word']}」已存在，已展示已有内容", **_word_response(w)},
+                )
 
-    word_id = uuid.uuid4().hex[:12]
-    word_obj = {
-        "id": word_id,
-        "word": word_text,
-        "definition": body.get("definition", "").strip(),
-        "phonetic": "",
-        "example": "",
-        "created_at": now_iso(),
-    }
+        word_id = uuid.uuid4().hex[:12]
+        word_obj = {
+            "id": word_id,
+            "word": word_text,
+            "definition": body.get("definition", "").strip(),
+            "phonetic": "",
+            "example": "",
+            "created_at": now_iso(),
+        }
 
-    data["words"].append(word_obj)
-    save_words(data)
+        data["words"].append(word_obj)
+        save_words(data)
+
+        if not word_obj["definition"]:
+            _new_enrichment_candidates[word_id] = dict(word_obj)
 
     # 送入补全队列，后台串行处理（持续累加，不重置 — 用户显式补全缺失才是新一批）
-    await _enqueue_enrich_batch([(word_id, word_text)])
+    if not word_obj["definition"]:
+        await _enqueue_enrich_batch([(word_id, word_text)])
 
-    return {"word": word_obj}
+    return _word_response(word_obj)
+
+
+def _discard_unrecognized_new_word(word_id):
+    with _write_lock:
+        candidate = _new_enrichment_candidates.get(word_id)
+        if candidate is None:
+            return False
+        data = load_words()
+        current = next((w for w in data["words"] if w["id"] == word_id), None)
+        if current != candidate:
+            return False
+        data["words"] = [w for w in data["words"] if w["id"] != word_id]
+        save_words(data)
+        return True
+
+
+async def _reject_unrecognized(word_id, word_text):
+    removed = _discard_unrecognized_new_word(word_id)
+    reason = "未识别为有效词汇，已自动移除本次新增内容，请检查拼写。" if removed else "未识别为有效词汇，已有或已修改的内容已保留，请检查拼写。"
+    _enrich_states[word_id] = {"status": "removed" if removed else "failed", "error": reason}
+    if _event_queue is not None:
+        await _event_queue.put({"type": "enrich_failed", "word_id": word_id,
+                                "word": word_text, "reason": reason, "removed": removed})
 
 
 async def _enrich_worker():
-    """单 worker 从队列串行取任务，逐个调用 Ollama，避免并发排队超时"""
+    """单 worker 串行调用模型，保留人工编辑内容。"""
     global _enrich_current, _enrich_batch_done
     import logging
     logger = logging.getLogger("uvicorn")
     logger.warning("[enrich-worker] started")
     while True:
         word_id, word_text = await _enrich_queue.get()
+        _enrich_states[word_id] = {"status": "processing"}
         _enrich_current = word_text
         logger.warning(f"[enrich-worker] picked: {word_text!r} id={word_id}")
         try:
+            current_data = load_words()
+            current_word = next((w for w in current_data["words"] if w["id"] == word_id), None)
+            if current_word is None:
+                continue
             phonetic, definition, example = await enrich_word(word_text)
             if not phonetic and not definition and not example:
-                # 全空响应。词组(空格)静默不打扰 — 可能是 deepseek 对该词组不熟;
-                # 单个词推 toast 提示 — 可能是拼错/不存在/网络失败。
-                logger.warning(f"[enrich] {word_text} — deepseek 返回空")
-                if " " not in word_text and _event_queue is not None:
-                    await _event_queue.put({
-                        "type": "enrich_failed",
-                        "word_id": word_id,
-                        "word": word_text,
-                        "reason": "deepseek 未返回任何内容(可能是错误单词、不存在的词、或网络失败)",
-                    })
-                _enriching_ids.pop(word_id, None)
+                await _reject_unrecognized(word_id, word_text)
+                _enrich_batch_done += 1
                 continue
 
             # 后处理校验：拦截拼写错/中文例句/词性误标
             ok, reason = _enrich_post_check(word_text, phonetic, definition, example)
             if not ok:
+                if reason.startswith(("word 不在英语词典", "词组中分词拼写错")):
+                    await _reject_unrecognized(word_id, word_text)
+                    _enrich_batch_done += 1
+                    continue
+                _enrich_states[word_id] = {"status": "failed", "error": reason}
                 logger.warning(f"[enrich-check] {word_text} — 拒绝写回: {reason}")
                 if _event_queue is not None:
                     await _event_queue.put({
@@ -1225,34 +1282,54 @@ async def _enrich_worker():
                 _enriching_ids.pop(word_id, None)
                 continue
 
+            written = None
             with _write_lock:
                 data = load_words()
                 for w in data["words"]:
-                    if w["id"] == word_id:
-                        if phonetic:
+                    if w["id"] == word_id and w["word"] == word_text:
+                        if phonetic and not w.get("phonetic"):
                             w["phonetic"] = phonetic
-                        if definition:
+                        if definition and not w.get("definition"):
                             w["definition"] = definition
-                        if example:
+                        if example and not w.get("example"):
                             w["example"] = example
                         save_words(data)
+                        written = {key: w[key] for key in ("phonetic", "definition", "example")}
                         break
 
             _enrich_batch_done += 1
-            if _event_queue is not None:
+            if written is None:
+                reason = "单词已更改，旧补全结果未写入，请重新补全。"
+                _enrich_states[word_id] = {"status": "failed", "error": reason}
+                _enriching_ids.pop(word_id, None)
+                if _event_queue is not None:
+                    await _event_queue.put({"type": "enrich_failed", "word_id": word_id,
+                                            "word": word_text, "reason": reason})
+                continue
+            _enrich_states[word_id] = {"status": "ready" if written and written["definition"] else "idle"}
+            if written is not None and _event_queue is not None:
                 await _event_queue.put({
                     "type": "enriched",
                     "word_id": word_id,
-                    "phonetic": phonetic,
-                    "definition": definition,
-                    "example": example,
+                    **written,
                 })
+        except EnrichmentUnavailable as exc:
+            _enrich_states[word_id] = {"status": "failed", "error": str(exc)}
+            _enrich_batch_done += 1
+            if _event_queue is not None:
+                await _event_queue.put({"type": "enrich_failed", "word_id": word_id,
+                                        "word": word_text, "reason": str(exc), "removed": False})
         except Exception as e:
+            _enrich_states[word_id] = {"status": "failed", "error": "自动补全未完成，单词已保存，可以重试或手动编辑。"}
             # 外层保护:任何意外异常都不让 worker 死,记录后继续下一个
-            logger.exception(f"[enrich-worker] UNCAUGHT EXCEPTION: {e}")
+            logger.warning("[enrich-worker] failed: %s", type(e).__name__)
             import asyncio as _aio
             await _aio.sleep(1)
         finally:
+            _new_enrichment_candidates.pop(word_id, None)
+            if _enrich_states.get(word_id, {}).get("status") == "processing":
+                _enrich_states[word_id] = {"status": "idle"}
+            _enriching_ids.pop(word_id, None)
             _enrich_current = None
             _enrich_queue.task_done()
 
@@ -1304,27 +1381,31 @@ def _enrich_post_check(word: str, phonetic: str, definition: str, example: str) 
 
 @app.put("/api/words/{word_id}")
 def update_word(word_id: str, body: dict):
-    data = load_words()
-    for w in data["words"]:
-        if w["id"] == word_id:
-            if "word" in body:
-                w["word"] = body["word"].strip()
-            if "definition" in body:
-                w["definition"] = body["definition"].strip()
-            save_words(data)
-            return {"word": w}
-    raise HTTPException(status_code=404, detail="单词不存在")
+    with _write_lock:
+        data = load_words()
+        for w in data["words"]:
+            if w["id"] == word_id:
+                if "word" in body:
+                    w["word"] = body["word"].strip()
+                if "definition" in body:
+                    w["definition"] = body["definition"].strip()
+                save_words(data)
+                _new_enrichment_candidates.pop(word_id, None)
+                return {"word": w}
+        raise HTTPException(status_code=404, detail="单词不存在")
 
 
 @app.delete("/api/words/{word_id}")
 def delete_word(word_id: str):
-    data = load_words()
-    before = len(data["words"])
-    data["words"] = [w for w in data["words"] if w["id"] != word_id]
-    if len(data["words"]) == before:
-        raise HTTPException(status_code=404, detail="单词不存在")
-    save_words(data)
-    return {"ok": True}
+    with _write_lock:
+        data = load_words()
+        before = len(data["words"])
+        data["words"] = [w for w in data["words"] if w["id"] != word_id]
+        if len(data["words"]) == before:
+            raise HTTPException(status_code=404, detail="单词不存在")
+        save_words(data)
+        _new_enrichment_candidates.pop(word_id, None)
+        return {"ok": True}
 
 
 # ─── 导出辅助函数 ─────────────────────────────────────────
