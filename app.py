@@ -87,7 +87,7 @@ async def _periodic_backup_loop():
             print(f"  [backup] failed: {type(e).__name__}: {e}")
 
 
-app = FastAPI(title="Vocabulary Notebook", lifespan=lifespan)
+app = FastAPI(title="Vocabulary Notebook", version="1.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
