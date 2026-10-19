@@ -1339,6 +1339,10 @@ select option { background: var(--surface); color: var(--text); }
   border-color: var(--accent);
 }
 
+.added-words { margin-top: 32px; }
+.added-words h3 { margin-bottom: 12px; }
+.added-words-hint { color: var(--text-muted); font-size: 13px; margin: 8px 0 16px; }
+
 /* ─── Scrollbar ──────────────────────────── */
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }

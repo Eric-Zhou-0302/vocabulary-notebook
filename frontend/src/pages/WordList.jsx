@@ -64,21 +64,26 @@ export default function WordList() {
   const [enriching, setEnriching] = useState(false)
   const [toast, setToast] = useState('')
   const [sseDisconnected, setSseDisconnected] = useState(false)
+  const [libraryVersion, setLibraryVersion] = useState(0)
 
-  useEffect(() => { fetchDates().then(d => setDates(d.dates)).catch(() => {}) }, [])
+  useEffect(() => { fetchDates().then(d => setDates(d.dates)).catch(() => {}) }, [libraryVersion])
 
   useEffect(() => {
+    let alive = true
     setLoading(true)
     setError('')
     fetchWords({ q, date, page, sort, letter })
       .then(data => {
+        if (!alive) return
         setWords(data.words)
         setTotalPages(data.pages)
         setAvailableLetters(data.available_letters || [])
+        if (page > Math.max(1, data.pages)) setPage(Math.max(1, data.pages))
       })
-      .catch(() => setError('加载失败，请确认后端服务是否运行'))
-      .finally(() => setLoading(false))
-  }, [q, date, page, sort, letter])
+      .catch(() => { if (alive) setError('加载失败，请确认后端服务是否运行') })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [q, date, page, sort, letter, libraryVersion])
 
   function toggleLetter(l) {
     setLetter(prev => (prev === l ? '' : l))
@@ -93,7 +98,12 @@ export default function WordList() {
   }, [])
 
   // SSE: enrich 校验失败 — toast 提示用户
-  const handleEnrichFailed = useCallback((wordId, word, reason) => {
+  const handleEnrichFailed = useCallback((wordId, word, reason, detail) => {
+    if (detail?.removed) {
+      setWords(previous => previous.filter(w => w.id !== wordId))
+      setLibraryVersion(previous => previous + 1)
+      window.dispatchEvent(new Event('review-stats-changed'))
+    }
     // 简化 reason 文本(去掉引号和括号内的细节)
     const cleanReason = reason.replace(/['"()（）]/g, '').slice(0, 60)
     setToast(`自动补全失败: ${word} — ${cleanReason}`)
