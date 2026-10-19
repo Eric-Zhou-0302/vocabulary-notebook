@@ -288,3 +288,7 @@ cd frontend && npm run build
 ## License
 
 [MIT](https://opensource.org/licenses/MIT) © 2026 [Eric Zhou](https://ericzhou.net/)
+
+## 学习导航
+
+顶部突出“单词列表 / 添加单词 / 复习”，当前页高亮，详情归入列表入口；复习角标保留待复习数量。模型连接状态移到紧凑状态栏，模型设置和主题切换保留在顶部辅助区域。支持键盘焦点与窄屏显示。本改动仅调整界面，不改变数据、AI 或存储。
