@@ -64,6 +64,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        cloud.cancel_auth()
         sync_task.cancel()
         backup_task.cancel()
         worker_task.cancel()
@@ -1462,7 +1463,7 @@ def _filter_words(data: dict, q: str, date: str, sort: str = "", letter: str = "
 async def _cloud_sync_loop():
     while True:
         try:
-            if cloud.status()["connected"] and not cloud.auth_pending:
+            if (await asyncio.to_thread(cloud.status))["connected"] and not cloud.auth_pending:
                 await asyncio.to_thread(cloud.sync)
         except (ValueError, RuntimeError, OSError) as exc:
             cloud.error = str(exc)[:250]
@@ -1504,6 +1505,12 @@ def configure_sync_folder(body: dict):
         return cloud.configure_folder(_text(body, "folder_path", limit=1000))
     except (ValueError, OSError) as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@app.post("/api/sync/cancel-auth")
+def cancel_drive_auth():
+    cloud.cancel_auth()
+    return {"ok": True}
 
 
 @app.post("/api/sync/disconnect")

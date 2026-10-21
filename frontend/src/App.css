@@ -1396,17 +1396,17 @@ select option { background: var(--surface); color: var(--text); }
 .model-status.off { color: var(--error); }
 @media (max-width: 520px) { .provider-options { grid-template-columns: 1fr; gap: 10px; } .model-settings .provider-option { padding: 14px; } .settings-panel { padding: 18px 14px; } }
 
-.cloud-status { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:12px 0 24px; font-size:12px; color:var(--text-dim); }
-.cloud-status-label { display:flex; align-items:center; gap:6px; }
-.status-dot { width:6px; height:6px; border-radius:50%; background:var(--text-dim); }
-.cloud-status.connected .status-dot { background:var(--success); }
-.cloud-status.has-error .status-dot,.cloud-warning { color:var(--error); }
-.status-action { border:0; background:none; color:var(--text-dim); text-decoration:underline; cursor:pointer; }
-.settings-card { margin-top:22px; padding:24px; border:1px solid var(--border); border-radius:12px; background:var(--surface); }
-.settings-card h3,.settings-card p { margin-bottom:12px; }
-.setup-steps { padding-left:22px; margin:18px 0; }
-.file-action { display:block; margin:20px 0; }
-.file-action input { display:block; margin-top:10px; max-width:100%; }
-.settings-note { color:var(--text-dim); font-size:13px; }
-.settings-error { color:var(--error); }
-.settings-message { margin:20px 0; padding:12px; border-left:3px solid var(--accent); }
+/* 同步入口与主导航同一行，始终显示可辨识的功能名称。 */
+.app-header { gap: 24px; align-items: center; }
+.app-header > div { flex-shrink: 0; }
+.app-nav { gap: 18px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.app-nav .cloud-entry { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.cloud-entry-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text-muted); }
+.cloud-entry.connected .cloud-entry-dot { background: var(--success); }
+.cloud-entry.has-error .cloud-entry-dot { background: var(--error); }
+@media (max-width: 700px) {
+  .app-header { align-items: flex-start; flex-direction: column; gap: 18px; margin-bottom: 26px; }
+  .app-nav { width: 100%; justify-content: flex-start; gap: 12px 18px; }
+  .app-nav a { white-space: nowrap; }
+  .app-nav .theme-toggle { margin-left: auto; }
+}

@@ -295,3 +295,126 @@ def test_future_cache_version_never_overwrites_existing_data(tmp_path):
     with pytest.raises(ValueError):
         storage.commit(path, {"words": []})
     assert path.read_bytes() == original
+
+
+def test_pending_auth_can_resume_and_cancel_without_connecting(client):
+    credentials = {"installed": {"client_id": "test.apps.googleusercontent.com", "client_secret": "secret"}}
+    assert client.post('/api/sync/credentials', json=credentials).status_code == 200
+    first = client.post('/api/sync/connect').json()['authorization_url']
+    state = client.get('/api/sync/status').json()
+    assert state['auth_pending'] and state['authorization_url'] == first
+    assert app.cloud.sync() == {'busy': True}
+    assert not app.cloud.busy
+    assert client.post('/api/sync/cancel-auth').status_code == 200
+    state = client.get('/api/sync/status').json()
+    assert not state['auth_pending'] and not state['connected']
+    assert state['authorization_url'] == ''
+    assert not (app.cloud.secrets_dir / 'token.json').exists()
+    second = client.post('/api/sync/connect').json()['authorization_url']
+    assert second != first
+    client.post('/api/sync/cancel-auth')
+
+
+def test_token_refresh_does_not_block_status(tmp_path, monkeypatch):
+    sync = engine(tmp_path / 'words.json', tmp_path / 'secrets')
+    connect_fake(sync)
+    entered, release = threading.Event(), threading.Event()
+    drive = FakeDrive()
+    def handle(request):
+        if request.url.path.endswith('/token'):
+            entered.set()
+            assert release.wait(5)
+        return drive.handle(request)
+    real_client = httpx.Client
+    monkeypatch.setattr(drive_sync.httpx, 'Client', lambda **kw: real_client(transport=httpx.MockTransport(handle), **kw))
+    worker = threading.Thread(target=sync.sync)
+    worker.start()
+    try:
+        assert entered.wait(2)
+        # 查询必须在网络请求结束之前完成，否则 UI 会一直等待。
+        from concurrent.futures import ThreadPoolExecutor
+        pool = ThreadPoolExecutor(1)
+        future = pool.submit(sync.status)
+        try:
+            assert future.result(timeout=1)['syncing']
+        finally:
+            release.set()
+            pool.shutdown(wait=True)
+    finally:
+        release.set()
+        worker.join(5)
+    assert not worker.is_alive()
+    assert not sync.status()['syncing']
+
+
+def test_switch_folder_resets_last_success_time(tmp_path):
+    sync = engine(tmp_path / 'words.json', tmp_path / 'secrets')
+    sync.configure_folder(str(tmp_path / 'first'))
+    assert 'error' not in sync.sync()
+    assert sync.status()['last_synced_at']
+    sync.configure_folder(str(tmp_path / 'second'))
+    assert sync.status()['last_synced_at'] is None
+
+
+def test_cancelled_oauth_callback_cannot_persist_credentials(tmp_path, monkeypatch):
+    from urllib.parse import urlparse, parse_qs, urlencode
+    sync = engine(tmp_path / 'words.json', tmp_path / 'secrets')
+    sync.import_credentials({'installed': {'client_id': 'test.apps.googleusercontent.com', 'client_secret': 'secret'}})
+    entered, release = threading.Event(), threading.Event()
+    real_client = httpx.Client
+    def handle(request):
+        if request.url.path.endswith('/token'):
+            entered.set()
+            assert release.wait(5)
+            return httpx.Response(200, json={'access_token': 'access', 'refresh_token': 'refresh', 'expires_in': 3600})
+        return httpx.Response(200, json={'user': {'permissionId': 'user', 'emailAddress': 'test@example.com'}})
+    monkeypatch.setattr(drive_sync.httpx, 'Client', lambda **kw: real_client(transport=httpx.MockTransport(handle), **kw))
+    query = parse_qs(urlparse(sync.begin_auth()['authorization_url']).query)
+    callback = query['redirect_uri'][0] + '?' + urlencode({'state': query['state'][0], 'code': 'code'})
+    def call():
+        with real_client(timeout=5, trust_env=False) as browser:
+            browser.get(callback)
+    worker = threading.Thread(target=call)
+    worker.start()
+    try:
+        assert entered.wait(2)
+        sync.cancel_auth()
+        newer = sync.begin_auth()['authorization_url']
+        release.set()
+        worker.join(5)
+        assert not worker.is_alive()
+        assert not (sync.secrets_dir / 'token.json').exists()
+        assert sync.status()['authorization_url'] == newer
+        assert sync.status()['auth_pending']
+        assert not sync.error
+    finally:
+        release.set()
+        sync.cancel_auth()
+        worker.join(5)
+
+
+@pytest.mark.parametrize('denied', [False, True])
+def test_oauth_callback_completes_or_reports_denial(tmp_path, monkeypatch, denied):
+    from urllib.parse import urlparse, parse_qs, urlencode
+    sync = engine(tmp_path / 'words.json', tmp_path / 'secrets')
+    sync.import_credentials({'installed': {'client_id': 'test.apps.googleusercontent.com', 'client_secret': 'secret'}})
+    real_client = httpx.Client
+    def handle(request):
+        if request.url.path.endswith('/token'):
+            return httpx.Response(200, json={'access_token': 'access', 'refresh_token': 'refresh', 'expires_in': 3600})
+        return httpx.Response(200, json={'user': {'permissionId': 'user', 'emailAddress': 'test@example.com'}})
+    monkeypatch.setattr(drive_sync.httpx, 'Client', lambda **kw: real_client(transport=httpx.MockTransport(handle), **kw))
+    query = parse_qs(urlparse(sync.begin_auth()['authorization_url']).query)
+    with real_client(timeout=5, trust_env=False) as browser:
+        # 不合法的 state 不应结束当前授权。
+        assert browser.get(query['redirect_uri'][0] + '?state=wrong&code=code').status_code == 400
+        assert sync.auth_pending
+        params = {'state': query['state'][0], **({'error': 'access_denied'} if denied else {'code': 'code'})}
+        assert browser.get(query['redirect_uri'][0] + '?' + urlencode(params)).status_code == 200
+    assert not sync.auth_pending
+    assert not sync.authorization_url
+    assert sync.status()['connected'] is not denied
+    assert bool(sync.error) is denied
+    if not denied:
+        assert sync.status()['account'] == 'test@example.com'
+        assert storage.read(sync.data_path())['_sync']['account'] == 'test.apps.googleusercontent.com:user'

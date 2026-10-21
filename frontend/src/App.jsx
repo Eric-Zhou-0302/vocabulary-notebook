@@ -48,10 +48,10 @@ export default function App() {
             添加单词
           </Link>
           <Link to="/settings" className={location.pathname === '/settings' ? 'active' : ''}>模型设置</Link>
+          <CloudStatus />
           <ThemeToggle />
         </nav>
       </header>
-      <CloudStatus />
       <main className="app-main">
         <Routes key={location.pathname.startsWith('/word/') || ['/settings', '/sync-settings'].includes(location.pathname) ? location.pathname : cloudVersion}>
           <Route path="/" element={<WordList searchInputRef={searchInputRef} />} />

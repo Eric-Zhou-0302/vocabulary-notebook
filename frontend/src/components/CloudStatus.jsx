@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { libraryRequest } from '../api'
 
 export default function CloudStatus() {
+  const location = useLocation()
   const [status, setStatus] = useState(null)
   const [error, setError] = useState('')
-  const [running, setRunning] = useState(false)
   const pulled = useRef(undefined)
   useEffect(() => {
     let alive = true
@@ -24,29 +24,17 @@ export default function CloudStatus() {
     }
     refresh()
     const timer = setInterval(refresh, 3000)
-    return () => { alive = false; clearInterval(timer) }
+    window.addEventListener('sync-status-changed', refresh)
+    return () => { alive = false; clearInterval(timer); window.removeEventListener('sync-status-changed', refresh) }
   }, [])
-  async function sync() {
-    setRunning(true)
-    try {
-      await libraryRequest('/sync/run', 'POST')
-      setStatus(await libraryRequest('/sync/status'))
-      setError('')
-    } catch (err) { setError(err.message) }
-    finally { setRunning(false) }
-  }
   const problem = error || status?.error
-  const syncing = status?.syncing || running
-  const label = problem ? 'Drive 需检查' : syncing ? 'Drive 同步中…' : status?.connected ? 'Drive 已连接' : status ? '本地保存' : '检查连接…'
+  const syncing = status?.syncing
+  const label = problem ? 'Drive 需检查' : status?.auth_pending ? '等待 Google 授权' : syncing ? 'Drive 同步中…' : status?.connected ? 'Drive 已连接' : status ? '本地保存' : '检查连接…'
   const detail = problem || (status?.connected
     ? `${status.pending} 条变更待${status.provider === 'drive_folder' ? '写入文件夹；实际上传请查看 Drive 桌面版' : '同步'}${status.last_synced_at ? ` · 上次 ${new Date(status.last_synced_at).toLocaleTimeString()}` : ''}`
     : '连接 Google Drive 后，两台电脑可同步词汇与学习记录')
-  return <aside className={`cloud-status ${problem ? 'has-error' : status?.connected ? 'connected' : ''}`} aria-label="云端同步状态">
-    <Link to="/sync-settings" className="cloud-status-label" title={detail}>
-      <span className="status-dot" aria-hidden="true" />
-      <span aria-live="polite">{label}{!problem && !syncing && status?.connected && status.pending > 0 ? ` · 待处理 ${status.pending}` : ''}</span>
-    </Link>
-    {status?.connected && <button type="button" className="status-action" disabled={syncing} onClick={sync} title={detail} aria-label="立即同步">同步</button>}
-    {problem && <span className="cloud-warning" role="status">{problem}</span>}
-  </aside>
+  return <Link to="/sync-settings" className={`cloud-entry ${location.pathname === '/sync-settings' ? 'active' : ''} ${problem ? 'has-error' : status?.connected ? 'connected' : ''}`} title={detail} aria-label={`云端同步：${label}`}>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M7 18a5 5 0 0 1-.7-9.95A6 6 0 0 1 18 7a5.5 5.5 0 0 1 .5 11H7Z" /><path d="m9 13 3-3 3 3m-3-3v11" /></svg>
+    <span>云端同步</span><span className="cloud-entry-dot" aria-hidden="true" />
+  </Link>
 }
