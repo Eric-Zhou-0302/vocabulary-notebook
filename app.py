@@ -3,6 +3,7 @@ import asyncio
 import csv
 import html as html_mod
 import io
+import ipaddress
 import math
 import json
 import os
@@ -19,6 +20,8 @@ import httpx
 from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fpdf import FPDF
@@ -26,6 +29,9 @@ from fpdf import FPDF
 import config
 from event_broadcast import EventBroadcast
 import fsrs
+import sync_storage
+from drive_sync import DriveSync
+import instance_lock
 
 # ─── App ──────────────────────────────────────────────────
 
@@ -33,12 +39,20 @@ import fsrs
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _event_queue, _enrich_queue
+    cache_lock = instance_lock.acquire(DATA_FILE)
     # 启动时校验配置
     try:
         provider = config.get_provider()
+        config.get_sync_config()
         print(f"  [config] provider: {provider}")
     except RuntimeError as e:
         print(f"  [config] 配置错误：{e}")
+        cache_lock.close()
+        raise
+    try:
+        load_words()  # fail before starting workers if the local cache is damaged
+    except Exception:
+        cache_lock.close()
         raise
     _new_enrichment_candidates.clear()
     _enrich_states.clear()
@@ -46,14 +60,21 @@ async def lifespan(app: FastAPI):
     _enrich_queue = asyncio.Queue()
     worker_task = asyncio.create_task(_enrich_worker())
     backup_task = asyncio.create_task(_periodic_backup_loop())
-    yield
-    backup_task.cancel()
-    worker_task.cancel()
-    for t in (backup_task, worker_task):
-        try:
-            await t
-        except asyncio.CancelledError:
-            pass
+    sync_task = asyncio.create_task(_cloud_sync_loop())
+    try:
+        yield
+    finally:
+        sync_task.cancel()
+        backup_task.cancel()
+        worker_task.cancel()
+        for t in (sync_task, backup_task, worker_task):
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+        await asyncio.to_thread(cloud.lock.acquire)
+        cloud.lock.release()
+        cache_lock.close()
 
 
 async def _periodic_backup_loop():
@@ -92,12 +113,31 @@ async def _periodic_backup_loop():
 
 app = FastAPI(title="Vocabulary Notebook", version="1.1.0", lifespan=lifespan)
 
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:1400", "http://127.0.0.1:1400", "http://localhost:5173", "http://127.0.0.1:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def local_origin_guard(request: Request, call_next):
+    # Host and Origin are user-supplied. Authorize the actual socket peer too.
+    try:
+        local_peer = request.client is not None and ipaddress.ip_address(request.client.host).is_loopback
+    except ValueError:
+        local_peer = False
+    if not local_peer:
+        return JSONResponse({"detail": "仅允许本机访问词汇本"}, status_code=403)
+    origin = request.headers.get("origin")
+    if request.method not in ("GET", "HEAD", "OPTIONS") and origin and origin not in (
+        "http://localhost:1400", "http://127.0.0.1:1400", "http://localhost:5173", "http://127.0.0.1:5173"
+    ):
+        return JSONResponse({"detail": "仅允许本地词汇本页面修改数据"}, status_code=403)
+    return await call_next(request)
 
 # ─── Config ───────────────────────────────────────────────
 
@@ -133,6 +173,7 @@ _enrich_batch_done: int = 0
 # 后端运行时每 10 分钟把 words.json 原子复制到 words.json.bak。
 # 万一主文件被误删/损坏/被代码错误重写，备份至少落后 ≤10 分钟。
 BACKUP_INTERVAL_SECONDS = 600  # 10 分钟
+
 
 
 # ─── PDF 字体路径 (fpdf2 纯 Python，零系统依赖) ──────────
@@ -478,32 +519,21 @@ def _build_pdf(words: list[dict], today: str, use_cjk: bool, cjk_font_path: Opti
 
 # RLock 允许同一线程重入，_enrich_in_background 可在锁内 load+save
 _write_lock = threading.RLock()
+cloud = DriveSync(lambda: DATA_FILE, _write_lock, config.get_sync_config)
 
 
 def load_words() -> dict:
-    """读取 words.json，不存在时初始化，损坏时备份并返回空数据"""
+    """读取可离线使用的云端词库缓存；旧 words.json 自动无损迁移。"""
     with _write_lock:
-        if not DATA_FILE.exists():
-            save_words({"words": []})
-            return {"words": []}
-        try:
-            return json.loads(DATA_FILE.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            backup = DATA_FILE.with_suffix(f".json.bak.{datetime.now().strftime('%Y%m%d_%H%M%S')}")
-            DATA_FILE.rename(backup)
-            save_words({"words": []})
-            return {"words": []}
+        return sync_storage.read(DATA_FILE)
+
 
 
 def save_words(data: dict) -> None:
     """原子写入：先写临时文件再替换，防止并发写丢数据和写入中断损坏"""
     with _write_lock:
-        tmp = DATA_FILE.with_suffix(".tmp")
-        tmp.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        tmp.replace(DATA_FILE)
+        sync_storage.commit(DATA_FILE, data)
+
 
 
 def now_iso() -> str:
@@ -514,10 +544,14 @@ def now_iso() -> str:
 
 def _parse_review_time(value: str) -> datetime:
     """解析复习时间；兼容早期可能写入的无时区 ISO 字符串。"""
+    # Python 3.9 accepts an explicit UTC offset, but not the ISO UTC suffix Z.
+    if isinstance(value, str) and value.endswith("Z"):
+        value = value[:-1] + "+00:00"
     parsed = datetime.fromisoformat(value)
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=CHINA_TZ)
     return parsed.astimezone(CHINA_TZ)
+
 
 
 def _review_due_at(srs_state: dict) -> datetime:
@@ -1003,6 +1037,7 @@ def post_review(word_id: str, body: dict):
             "reps": reps,
             "lapses": lapses,
         }
+        word.setdefault("review_history", []).append({"id": uuid.uuid4().hex, "rating": rating, "at": now.isoformat()})
         save_words(data)
 
     card = {
@@ -1017,6 +1052,7 @@ def post_review(word_id: str, body: dict):
         "next_interval_seconds": interval_seconds,
         "next_interval": fsrs.format_interval(interval_seconds),
     }
+
 
 
 # 注意：/api/words/export 和 /api/words/enrich-missing 路由必须在
@@ -1171,7 +1207,7 @@ def _normalize_new_word(text: str) -> str:
 
 @app.post("/api/words")
 async def create_word(body: dict):
-    word_text = _normalize_new_word(body.get("word", "").strip())
+    word_text = _normalize_new_word(_text(body, "word", limit=200))
     if not word_text:
         raise HTTPException(status_code=422, detail="单词不能为空")
 
@@ -1190,6 +1226,7 @@ async def create_word(body: dict):
         word_id = uuid.uuid4().hex[:12]
         word_obj = {
             "id": word_id,
+            "notebook_id": "default",
             "word": word_text,
             "definition": body.get("definition", "").strip(),
             "phonetic": "",
@@ -1201,13 +1238,15 @@ async def create_word(body: dict):
         save_words(data)
 
         if not word_obj["definition"]:
-            _new_enrichment_candidates[word_id] = dict(word_obj)
+            stored = load_words()
+            _new_enrichment_candidates[word_id] = {"word": dict(word_obj), "operations": _word_operation_ids(stored, word_id)}
 
     # 送入补全队列，后台串行处理（持续累加，不重置 — 用户显式补全缺失才是新一批）
     if not word_obj["definition"]:
         await _enqueue_enrich_batch([(word_id, word_text)])
 
     return _word_response(word_obj)
+
 
 
 def _discard_unrecognized_new_word(word_id):
@@ -1217,11 +1256,12 @@ def _discard_unrecognized_new_word(word_id):
             return False
         data = load_words()
         current = next((w for w in data["words"] if w["id"] == word_id), None)
-        if current != candidate:
+        if current != candidate["word"] or _word_operation_ids(data, word_id) != candidate["operations"]:
             return False
         data["words"] = [w for w in data["words"] if w["id"] != word_id]
         save_words(data)
         return True
+
 
 
 async def _reject_unrecognized(word_id, word_text):
@@ -1417,6 +1457,146 @@ def _filter_words(data: dict, q: str, date: str, sort: str = "", letter: str = "
     elif sort == "alpha_desc":
         words = sorted(words, key=lambda w: w["word"].lower(), reverse=True)
     return words
+
+
+async def _cloud_sync_loop():
+    while True:
+        try:
+            if cloud.status()["connected"] and not cloud.auth_pending:
+                await asyncio.to_thread(cloud.sync)
+        except (ValueError, RuntimeError, OSError) as exc:
+            cloud.error = str(exc)[:250]
+        await asyncio.sleep(config.get_sync_config()["interval_seconds"])
+
+
+def _text(body, key, default="", limit=100000):
+    value = body.get(key, default)
+    if not isinstance(value, str) or len(value) > limit:
+        raise HTTPException(422, f"{key} 必须是长度不超过 {limit} 的文本")
+    return value.strip()
+
+
+@app.get("/api/sync/status")
+def sync_status():
+    return cloud.status()
+
+
+@app.post("/api/sync/credentials")
+def import_drive_credentials(body: dict):
+    try:
+        cloud.import_credentials(body)
+        return {"ok": True}
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.post("/api/sync/connect")
+def connect_drive():
+    try:
+        return cloud.begin_auth()
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@app.post("/api/sync/folder")
+def configure_sync_folder(body: dict):
+    try:
+        return cloud.configure_folder(_text(body, "folder_path", limit=1000))
+    except (ValueError, OSError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.post("/api/sync/disconnect")
+def disconnect_drive():
+    try:
+        cloud.disconnect()
+        return {"ok": True}
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@app.post("/api/sync/run")
+def run_sync():
+    result = cloud.sync()
+    if result.get("error"):
+        raise HTTPException(503, result["error"])
+    return result
+
+
+@app.get("/api/library/export")
+def export_library():
+    data = load_words()
+    return JSONResponse({"version": sync_storage.VERSION, "operations": list(data["_sync"]["operations"].values()),
+                         "words": data["words"], "notebooks": data["notebooks"], "exported_at": now_iso()},
+                        headers={"Content-Disposition": "attachment; filename=vocabulary-library.json"})
+
+
+@app.post("/api/library/import")
+def import_library(body: dict):
+    if "operations" in body:
+        if body.get("version") != sync_storage.VERSION:
+            raise HTTPException(422, "备份版本不兼容")
+        try:
+            with _write_lock:
+                count = sync_storage.merge(DATA_FILE, body["operations"])
+            return {"imported": count, "message": f"已合并 {count} 条变更及复习记录"}
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(422, "备份变更记录无效，未导入") from exc
+    words, books = body.get("words"), body.get("notebooks", [])
+    if not isinstance(words, list) or len(words) > 50000 or not isinstance(books, list) or len(books) > 500:
+        raise HTTPException(422, "请选择词库 JSON 备份文件")
+    # Validate the entire import before touching the live cache.
+    clean_books, clean_words = [], []
+    for book in books:
+        if not isinstance(book, dict):
+            raise HTTPException(422, "单词本格式无效")
+        clean_books.append({"id": _text(book, "id", limit=200), "name": _text(book, "name", limit=80),
+                            "description": _text(book, "description", limit=500)})
+        if not clean_books[-1]["id"] or not clean_books[-1]["name"]:
+            raise HTTPException(422, "单词本 ID 与名称不能为空")
+    for word in words:
+        if not isinstance(word, dict):
+            raise HTTPException(422, "单词格式无效")
+        cleaned = {key: _text(word, key, limit=200 if key in ("id", "notebook_id") else 100000)
+                   for key in ("id", "word", "definition", "phonetic", "example", "created_at", "notebook_id")}
+        cleaned["notebook_id"] = cleaned["notebook_id"] or "default"
+        if not cleaned["id"] or not cleaned["word"]:
+            raise HTTPException(422, "单词 ID 与拼写不能为空")
+        if word.get("srs"):
+            cleaned["srs"] = word["srs"]
+            try:
+                _review_due_at(cleaned["srs"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise HTTPException(422, "备份中的复习状态无效") from exc
+        # A portable backup contains the final SRS state, not replayable old events.
+        clean_words.append(cleaned)
+    with _write_lock:
+        data = load_words()
+        known_books = {book["id"] for book in data["notebooks"]}
+        for book in clean_books:
+            if book["id"] not in known_books:
+                data["notebooks"].append(book)
+                known_books.add(book["id"])
+        known_words = {word["id"] for word in data["words"]}
+        imported = 0
+        for word in clean_words:
+            if word["notebook_id"] not in known_books:
+                raise HTTPException(422, "备份引用了不存在的单词本")
+            if word["id"] not in known_words:
+                # Use a new identity for a previously deleted word, retaining its schedule.
+                if any(op["entity_id"] == word["id"] and op["field"] == "deleted"
+                       for op in data["_sync"]["operations"].values()):
+                    word["id"] = uuid.uuid4().hex
+                data["words"].append(word)
+                known_words.add(word["id"])
+                imported += 1
+        save_words(data)
+    return {"imported": imported, "message": f"已导入 {imported} 个单词；已有记录保留原样"}
+
+
+def _word_operation_ids(data, word_id):
+    return frozenset(op["id"] for op in data["_sync"]["operations"].values()
+                     if op["entity"] == "word" and op["entity_id"] == word_id)
 
 
 # ─── 静态文件（生产模式）──────────────────────────────────

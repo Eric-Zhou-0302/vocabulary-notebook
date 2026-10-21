@@ -8,3 +8,6 @@ words.json
 words.json.bak
 words.json.bak.*
 config.json
+.secrets/
+words.json.legacy.bak
+words.json.lock

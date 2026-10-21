@@ -1,5 +1,7 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
+import CloudStatus from './components/CloudStatus'
+import SyncSettings from './pages/Settings'
 import WordList from './pages/WordList'
 import WordNew from './pages/WordNew'
 import WordDetail from './pages/WordDetail'
@@ -14,6 +16,12 @@ import HelpModal from './components/HelpModal'
 export default function App() {
   const location = useLocation()
   const dueCount = useDueCount()
+  const [cloudVersion, setCloudVersion] = useState(0)
+  useEffect(() => {
+    const refresh = () => { setCloudVersion(v => v + 1); window.dispatchEvent(new Event('review-stats-changed')) }
+    window.addEventListener('cloud-data-changed', refresh)
+    return () => window.removeEventListener('cloud-data-changed', refresh)
+  }, [])
   const searchInputRef = useRef(null)
   const [helpOpen, setHelpOpen] = useState(false)
   const toggleHelp = useCallback(() => setHelpOpen(o => !o), [])
@@ -43,11 +51,13 @@ export default function App() {
           <ThemeToggle />
         </nav>
       </header>
+      <CloudStatus />
       <main className="app-main">
-        <Routes>
+        <Routes key={location.pathname.startsWith('/word/') || ['/settings', '/sync-settings'].includes(location.pathname) ? location.pathname : cloudVersion}>
           <Route path="/" element={<WordList searchInputRef={searchInputRef} />} />
           <Route path="/word/new" element={<WordNew />} />
           <Route path="/word/:id" element={<WordDetail />} />
+          <Route path="/sync-settings" element={<SyncSettings />} />
           <Route path="/settings" element={<ModelSettings />} />
           <Route path="/review" element={<Review />} />
         </Routes>
