@@ -26,7 +26,11 @@ export function BooksProvider({ children }) {
   useEffect(() => {
     reload()
     window.addEventListener('library-changed', reload)
-    return () => window.removeEventListener('library-changed', reload)
+    window.addEventListener('cloud-data-changed', reload)
+    return () => {
+      window.removeEventListener('library-changed', reload)
+      window.removeEventListener('cloud-data-changed', reload)
+    }
   }, [reload])
   function select(id) {
     localStorage.setItem('vocabulary-notebook-id', id)

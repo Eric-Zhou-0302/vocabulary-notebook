@@ -2,7 +2,7 @@
 import asyncio
 
 import pytest
-from fastapi.testclient import TestClient
+from tests.local_client import TestClient
 
 import app
 
@@ -20,7 +20,7 @@ def queue_loop():
 
 
 def word(word_id, created_at, **extra):
-    return {"id": word_id, "word": word_id, "definition": "n. 测试", "phonetic": "",
+    return {"notebook_id": "default", "id": word_id, "word": word_id, "definition": "n. 测试", "phonetic": "",
             "example": "This is a test.", "created_at": created_at, **extra}
 
 

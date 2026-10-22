@@ -1,6 +1,8 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { BookPicker, useBooks } from './Books'
+import CloudStatus from './components/CloudStatus'
+import SyncSettings from './pages/Settings'
 import WordList from './pages/WordList'
 import WordNew from './pages/WordNew'
 import WordDetail from './pages/WordDetail'
@@ -16,6 +18,12 @@ export default function App() {
   const location = useLocation()
   const { active } = useBooks()
   const dueCount = useDueCount(active)
+  const [cloudVersion, setCloudVersion] = useState(0)
+  useEffect(() => {
+    const refresh = () => { setCloudVersion(v => v + 1); window.dispatchEvent(new Event('review-stats-changed')) }
+    window.addEventListener('cloud-data-changed', refresh)
+    return () => window.removeEventListener('cloud-data-changed', refresh)
+  }, [])
   const searchInputRef = useRef(null)
   const [helpOpen, setHelpOpen] = useState(false)
   const toggleHelp = useCallback(() => setHelpOpen(o => !o), [])
@@ -42,15 +50,17 @@ export default function App() {
             添加单词
           </Link>
           <Link to="/settings" className={location.pathname === '/settings' ? 'active' : ''}>模型设置</Link>
+          <CloudStatus />
           <ThemeToggle />
         </nav>
       </header>
       <BookPicker />
       <main className="app-main">
-        <Routes key={location.pathname === '/settings' ? 'settings' : location.pathname.startsWith('/word/') && location.pathname !== '/word/new' ? location.pathname : active}>
+        <Routes key={location.pathname.startsWith('/word/') || ['/settings', '/sync-settings'].includes(location.pathname) ? location.pathname : `${active}:${cloudVersion}`}>
           <Route path="/" element={<WordList searchInputRef={searchInputRef} />} />
           <Route path="/word/new" element={<WordNew />} />
           <Route path="/word/:id" element={<WordDetail />} />
+          <Route path="/sync-settings" element={<SyncSettings />} />
           <Route path="/settings" element={<ModelSettings />} />
           <Route path="/review" element={<Review />} />
         </Routes>

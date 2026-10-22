@@ -1,10 +1,6 @@
 const BASE = '/api'
 export function activeNotebookId() { return localStorage.getItem('vocabulary-notebook-id') ?? 'default' }
 function scoped(url) { return `${url}${url.includes('?') ? '&' : '?'}notebook_id=${encodeURIComponent(activeNotebookId())}` }
-export async function libraryRequest(path, method = 'GET', body) {
-  return (await request(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json()
-}
-
 async function request(url, options = {}) {
   const res = await fetch(BASE + url, {
     headers: { 'Content-Type': 'application/json' },
@@ -58,7 +54,7 @@ export async function deleteWord(id) {
 
 export function exportUrl(format, { q = '', date = '', sort = '' } = {}) {
   const params = new URLSearchParams({ format, q, date, sort })
-  return `${BASE}/words/export?${params}`
+  return BASE + scoped(`/words/export?${params}`)
 }
 
 export async function enrichMissing() {
@@ -85,4 +81,8 @@ export async function rateWord(wordId, rating) {
   const result = await res.json()
   window.dispatchEvent(new Event('review-stats-changed'))
   return result
+}
+
+export async function libraryRequest(path, method = 'GET', body) {
+  return (await request(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json()
 }

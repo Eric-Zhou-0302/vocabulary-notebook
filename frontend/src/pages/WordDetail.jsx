@@ -17,6 +17,7 @@ export default function WordDetail() {
   const [editExample, setEditExample] = useState('')
   const [saveError, setSaveError] = useState('')
   const { books } = useBooks()
+  const [syncNotice, setSyncNotice] = useState('')
 
   useEffect(() => {
     let active = true
@@ -27,15 +28,19 @@ export default function WordDetail() {
         const data = await fetchWord(id)
         if (!active || current !== request) return
         setWord(data.word)
+        if (fromCloud) setSyncNotice('云端内容已更新，当前未保存的编辑已保留。保存会提交编辑框中的内容。')
       } catch {
         if (!active || current !== request) return
-        setError('单词不存在')
+        if (fromCloud) setSyncNotice('无法刷新此单词，它可能已在另一台电脑删除。当前编辑仍已保留，请先复制需要的内容。')
+        else setError('单词不存在')
       } finally {
         if (active && current === request) setLoading(false)
       }
     }
+    const onCloudChange = () => refresh(true)
+    window.addEventListener('cloud-data-changed', onCloudChange)
     refresh()
-    return () => { active = false }
+    return () => { active = false; window.removeEventListener('cloud-data-changed', onCloudChange) }
   }, [id])
 
   function startEdit() {
@@ -81,6 +86,7 @@ export default function WordDetail() {
     <div>
       <button onClick={() => navigate(-1)} className="btn btn-ghost" style={{ marginBottom: 16 }}>← 返回</button>
 
+      {syncNotice && <p role="status">{syncNotice}</p>}
       <div className="detail-card">
         <p className="book-description">{books.find(book => book.id === word.notebook_id)?.name}</p>
         <div className="detail-word">{word.word}</div>

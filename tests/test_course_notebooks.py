@@ -2,8 +2,25 @@ import asyncio
 import json
 import httpx
 import pytest
-from fastapi.testclient import TestClient
+from tests.local_client import TestClient
 import app
+import sync_storage
+
+def test_course_move_and_review_replicate_to_second_cache(client, tmp_path):
+    book = client.post('/api/notebooks', json={'name': 'Law', 'description': 'Contract law'}).json()['notebook']['id']
+    word = client.post('/api/words', json={'word': 'covenant', 'definition': 'n. 契约'}).json()['word']['id']
+    assert client.put('/api/words/' + word, json={'notebook_id': book}).status_code == 200
+    assert client.post('/api/words/' + word + '/review', json={'rating': 3}).status_code == 200
+    local = sync_storage.read(app.DATA_FILE)
+    operations = list(local['_sync']['operations'].values())
+    remote = tmp_path / 'second-device.json'
+    assert sync_storage.merge(remote, operations) > 0
+    restored = sync_storage.read(remote)
+    assert restored['notebooks'] == local['notebooks']
+    assert restored['words'] == local['words']
+    assert restored['words'][0]['notebook_id'] == book
+    assert restored['words'][0]['srs']['reps'] == 1
+    assert sync_storage.merge(remote, operations) == 0
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
@@ -65,9 +82,9 @@ def test_legacy_read_and_first_edit_preserve_original_backup(client):
     app.DATA_FILE.write_text(json.dumps(original), encoding="utf8")
     before=app.DATA_FILE.read_bytes()
     assert client.get("/api/notebooks").json()["notebooks"][0]["word_count"] == 1
-    assert app.DATA_FILE.read_bytes() == before
+    assert app.DATA_FILE.with_suffix(".json.legacy.bak").read_bytes() == before
     law=client.post("/api/notebooks",json={"name":"Law"}).json()["notebook"]["id"]
-    assert app.DATA_FILE.with_suffix(".json.pre-notebooks.bak").read_bytes() == before
+    assert app.DATA_FILE.with_suffix(".json.legacy.bak").read_bytes() == before
     assert client.put("/api/words/legacy",json={"notebook_id":law}).status_code == 200
     assert client.get("/api/words/legacy").json()["word"]["srs"] == {"reps":3}
 
