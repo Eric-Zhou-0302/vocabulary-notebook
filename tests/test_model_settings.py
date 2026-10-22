@@ -3,7 +3,7 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi.testclient import TestClient
+from tests.local_client import TestClient
 
 import config
 from app import app

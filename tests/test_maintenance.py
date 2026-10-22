@@ -94,6 +94,7 @@ def test_lifespan_error_stops_workers_before_releasing_cache(tmp_path, monkeypat
     data, _, _ = library(tmp_path)
     monkeypatch.setattr(app, 'DATA_FILE', data)
     monkeypatch.setattr(app.config, 'get_provider', lambda: 'deepseek')
+    monkeypatch.setattr(app.config, 'get_sync_config', lambda: {'mode': 'disabled'})
     stopped = []
     async def worker():
         try:
@@ -104,11 +105,12 @@ def test_lifespan_error_stops_workers_before_releasing_cache(tmp_path, monkeypat
             stopped.append(True)
     monkeypatch.setattr(app, '_enrich_worker', worker)
     monkeypatch.setattr(app, '_periodic_backup_loop', worker)
+    monkeypatch.setattr(app, '_cloud_sync_loop', worker)
     async def scenario():
         with pytest.raises(ValueError, match='test failure'):
             async with app.lifespan(app.app):
                 await asyncio.sleep(0)
                 raise ValueError('test failure')
-        assert len(stopped) == 2
+        assert len(stopped) == 3
     asyncio.run(scenario())
     with instance_lock.acquire(data): pass

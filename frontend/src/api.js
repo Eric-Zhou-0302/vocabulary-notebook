@@ -81,3 +81,7 @@ export async function rateWord(wordId, rating) {
   window.dispatchEvent(new Event('review-stats-changed'))
   return result
 }
+
+export async function libraryRequest(path, method = 'GET', body) {
+  return (await request(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json()
+}

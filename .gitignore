@@ -13,3 +13,6 @@ config.json
 .secrets/
 *.lock
 .pytest_cache/
+.secrets/
+words.json.legacy.bak
+words.json.lock

@@ -1395,3 +1395,18 @@ select option { background: var(--surface); color: var(--text); }
 .settings-success { color: var(--success); margin-top: 16px; font-size: 13px; }
 .model-status.off { color: var(--error); }
 @media (max-width: 520px) { .provider-options { grid-template-columns: 1fr; gap: 10px; } .model-settings .provider-option { padding: 14px; } .settings-panel { padding: 18px 14px; } }
+
+/* 同步入口与主导航同一行，始终显示可辨识的功能名称。 */
+.app-header { gap: 24px; align-items: center; }
+.app-header > div { flex-shrink: 0; }
+.app-nav { gap: 18px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.app-nav .cloud-entry { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.cloud-entry-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text-muted); }
+.cloud-entry.connected .cloud-entry-dot { background: var(--success); }
+.cloud-entry.has-error .cloud-entry-dot { background: var(--error); }
+@media (max-width: 700px) {
+  .app-header { align-items: flex-start; flex-direction: column; gap: 18px; margin-bottom: 26px; }
+  .app-nav { width: 100%; justify-content: flex-start; gap: 12px 18px; }
+  .app-nav a { white-space: nowrap; }
+  .app-nav .theme-toggle { margin-left: auto; }
+}
