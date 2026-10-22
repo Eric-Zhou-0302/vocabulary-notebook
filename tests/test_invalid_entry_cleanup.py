@@ -34,7 +34,7 @@ def test_cleanup_only_removes_unchanged_new_invalid_entries(tmp_path, monkeypatc
                     app.update_word(wid, {"definition": ""})
             if case == "reviewed":
                 data = app.load_words()
-                data["words"][0]["srs"] = {"reps": 5}
+                data["words"][0]["review_history"] = [{"id": "isolated-review", "rating": 3, "at": "2026-10-18T00:00:00Z"}]
                 app.save_words(data)
             if case == "deleted":
                 app.delete_word(wid)
@@ -63,7 +63,7 @@ def test_cleanup_only_removes_unchanged_new_invalid_entries(tmp_path, monkeypatc
                 if case == "edited":
                     assert words[0]["definition"] == "n. 自己的释义"
                 if case == "reviewed":
-                    assert words[0]["srs"]["reps"] == 5
+                    assert words[0]["srs"]["reps"] == 1
                 if case == "renamed":
                     assert words[0]["word"] == "Contract" and not words[0]["definition"]
         finally:

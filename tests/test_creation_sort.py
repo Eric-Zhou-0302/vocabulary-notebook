@@ -1,6 +1,6 @@
 """Creation-time ordering does not mutate stored vocabulary or review progress."""
 import pytest
-from fastapi.testclient import TestClient
+from tests.local_client import TestClient
 import app
 
 
