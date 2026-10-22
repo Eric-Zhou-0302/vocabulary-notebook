@@ -10,5 +10,9 @@
   },
   "srs": {
     "daily_new_limit": 20
+  },
+  "sync": {
+    "interval_seconds": 30,
+    "credentials_dir": ".secrets"
   }
 }

@@ -1411,3 +1411,8 @@ select option { background: var(--surface); color: var(--text); }
   .app-utilities { gap:10px; font-size:12px; }
   .app-utilities a { white-space:nowrap; }
 }
+
+.app-utilities .cloud-entry { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+.cloud-entry-dot { width:5px; height:5px; border-radius:50%; background:var(--text-muted); }
+.cloud-entry.connected .cloud-entry-dot { background:var(--success); }
+.cloud-entry.has-error .cloud-entry-dot { background:var(--error); }
