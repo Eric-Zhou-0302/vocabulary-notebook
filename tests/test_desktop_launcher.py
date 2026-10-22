@@ -18,7 +18,7 @@ import httpx
 import pytest
 import app
 import desktop_service
-from fastapi.testclient import TestClient
+from tests.local_client import TestClient
 
 PROJECT = Path(__file__).resolve().parent.parent
 FLAGS = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
