@@ -289,6 +289,9 @@ cd frontend && npm run build
 
 [MIT](https://opensource.org/licenses/MIT) © 2026 [Eric Zhou](https://ericzhou.net/)
 
+## Windows 一键启动
+
+提供带自定义图标的 VocabularyBook.exe、桌面快捷方式及托盘安全退出。[使用与构建说明](docs/WINDOWS_LAUNCHER.md)。原有 Ollama / DeepSeek 与词库格式保持不变。
 ## Google Drive 同步
 
-通过页面的 Drive 状态进入“同步与备份”，连接两台私人电脑的同一 Drive 桌面文件夹，或选择 OAuth 隐藏数据区。词汇与逐次复习记录按操作合并，配置和凭据留在本机。详见 [Drive 指南](docs/DRIVE_SYNC.md)。本 PR 不包含自定义单词本或主导航改版。
+通过页面的 Drive 状态进入“同步与备份”，连接两台私人电脑的同一 Drive 桌面文件夹，或选择 OAuth 隐藏数据区。词汇与逐次复习记录按操作合并，配置和凭据留在本机。详见 [Drive 指南](docs/DRIVE_SYNC.md)。

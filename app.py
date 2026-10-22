@@ -3,6 +3,7 @@ import asyncio
 import csv
 import html as html_mod
 import io
+import hashlib
 import ipaddress
 import math
 import json
@@ -759,6 +760,13 @@ Reply ONLY with a JSON object, no other text:
         # Do not log provider responses, credentials or credential-bearing URLs.
         logger.warning("[enrich] provider unavailable: %s", type(exc).__name__)
         raise EnrichmentUnavailable("模型服务暂不可用，请检查配置、余额与网络后重试") from None
+
+
+@app.get("/api/instance")
+def desktop_instance():
+    root = str(Path(__file__).resolve().parent).rstrip("\\/").replace("\\", "/").lower()
+    return {"application": "vocabulary-notebook",
+            "installation_id": hashlib.sha256(root.encode("utf-8")).hexdigest()}
 
 
 # ─── API: SSE 事件流 ──────────────────────────────────────
