@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Routes, Route, Link, useLocation } from 'react-router-dom'
+import { BookPicker, useBooks } from './Books'
 import CloudStatus from './components/CloudStatus'
 import SyncSettings from './pages/Settings'
 import WordList from './pages/WordList'
@@ -15,7 +16,8 @@ import HelpModal from './components/HelpModal'
 
 export default function App() {
   const location = useLocation()
-  const dueCount = useDueCount()
+  const { active } = useBooks()
+  const dueCount = useDueCount(active)
   const [cloudVersion, setCloudVersion] = useState(0)
   useEffect(() => {
     const refresh = () => { setCloudVersion(v => v + 1); window.dispatchEvent(new Event('review-stats-changed')) }
@@ -52,8 +54,9 @@ export default function App() {
           <ThemeToggle />
         </nav>
       </header>
+      <BookPicker />
       <main className="app-main">
-        <Routes key={location.pathname.startsWith('/word/') || ['/settings', '/sync-settings'].includes(location.pathname) ? location.pathname : cloudVersion}>
+        <Routes key={location.pathname.startsWith('/word/') || ['/settings', '/sync-settings'].includes(location.pathname) ? location.pathname : `${active}:${cloudVersion}`}>
           <Route path="/" element={<WordList searchInputRef={searchInputRef} />} />
           <Route path="/word/new" element={<WordNew />} />
           <Route path="/word/:id" element={<WordDetail />} />

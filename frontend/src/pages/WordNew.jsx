@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createWord, fetchWord } from '../api'
 import { useSSE } from '../useSSE'
+import { useBooks } from '../Books'
 import WordCard from '../components/WordCard'
 
 function useProviderLabel() {
@@ -19,6 +20,8 @@ function useProviderLabel() {
 }
 
 export default function WordNew() {
+  const { books, active } = useBooks()
+  const [targetBook, setTargetBook] = useState(active || 'default')
   const [word, setWord] = useState('')
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState(null)
@@ -44,6 +47,7 @@ export default function WordNew() {
     window.dispatchEvent(new Event('review-stats-changed'))
   }, [])
   const handleFailed = useCallback((id, _word, reason, detail) => {
+    if (detail?.removed) window.dispatchEvent(new Event('library-changed'))
     setAddedWords(previous => previous.map(entry => entry.word.id === id
       ? { ...entry, enrichment: { status: detail?.removed ? 'removed' : 'failed', error: reason } } : entry))
   }, [])
@@ -89,7 +93,8 @@ export default function WordNew() {
     const submitted = word.trim()
     setLoading(true)
     try {
-      const result = await createWord(submitted)
+      const result = await createWord(submitted, '', targetBook)
+      window.dispatchEvent(new Event('library-changed'))
       showRecent(result)
       clearSubmitted(submitted)
       setToast({ type: 'info', msg: `「${result.word.word}」已保存` })
@@ -122,6 +127,10 @@ export default function WordNew() {
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
       <h2 style={{ marginBottom: 20 }}>添加单词</h2>
       <form onSubmit={handleSubmit}>
+        <div className="form-group"><label htmlFor="target-book">保存到</label>
+          <select id="target-book" value={targetBook} onChange={e => setTargetBook(e.target.value)}>
+            {books.map(book => <option key={book.id} value={book.id}>{book.name}</option>)}
+          </select></div>
         <div className="form-group">
           <label htmlFor="new-word">单词</label>
           <input

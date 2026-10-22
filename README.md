@@ -289,6 +289,9 @@ cd frontend && npm run build
 
 [MIT](https://opensource.org/licenses/MIT) © 2026 [Eric Zhou](https://ericzhou.net/)
 
+## 课程单词本
+
+可创建、命名并切换法律、金融等课程单词本，填写领域说明供 AI 参考；添加页选择保存目标。列表、日期、复习与导出按当前本筛选；全部单词本可跨本浏览。同词在不同本中可以有不同释义，详情可移动词条并保留学习记录。已有词库归入默认本，不需要云端账号。
 ## Google Drive 同步
 
-通过页面的 Drive 状态进入“同步与备份”，连接两台私人电脑的同一 Drive 桌面文件夹，或选择 OAuth 隐藏数据区。词汇与逐次复习记录按操作合并，配置和凭据留在本机。详见 [Drive 指南](docs/DRIVE_SYNC.md)。本 PR 不包含自定义单词本或主导航改版。
+通过页面的 Drive 状态进入“同步与备份”，连接两台私人电脑的同一 Drive 桌面文件夹，或选择 OAuth 隐藏数据区。词汇与逐次复习记录按操作合并，配置和凭据留在本机。详见 [Drive 指南](docs/DRIVE_SYNC.md)。
