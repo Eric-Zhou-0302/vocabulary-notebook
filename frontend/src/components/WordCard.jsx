@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { wordDetailPath } from '../lib/wordPaths.js'
 import NavigationIcon from './NavigationIcon'
 
 // case-insensitive 高亮 q 在 text 中所有出现位置
@@ -15,12 +16,11 @@ function highlight(text, q) {
   )
 }
 
-export default function WordCard({ word, q = '', index = 0, notebookName }) {
+export default function WordCard({ word, q = '', notebookName }) {
   return (
     <Link
-      to={`/word/${word.id}`}
+      to={wordDetailPath(word.id)}
       className="word-card"
-      style={{ '--card-index': index }}
     >
       <div className="word-card-top">
         {notebookName && <span className="word-book-name"><NavigationIcon name="notebooks" />{notebookName}</span>}

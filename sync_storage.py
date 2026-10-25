@@ -6,6 +6,8 @@ Keep operations/tombstones: an old offline computer must not resurrect deleted w
 import copy
 import json
 import math
+import os
+import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -16,15 +18,21 @@ DEFAULT_BOOK = "default"
 VERSION = 1
 
 
-def atomic_write(path: Path, data: dict):
+def atomic_write(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with tmp.open("w", encoding="utf-8") as stream:
-        json.dump(data, stream, ensure_ascii=False, indent=2, allow_nan=False)
-        stream.flush()
-        import os
-        os.fsync(stream.fileno())
-    tmp.replace(path)
+    tmp = None
+    try:
+        # 同目录独占临时文件保证替换原子性，也避免不同写入方争用固定文件名。
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                         prefix=f".{path.name}.", suffix=".tmp", delete=False) as stream:
+            tmp = Path(stream.name)
+            json.dump(data, stream, ensure_ascii=False, indent=2, allow_nan=False)
+            stream.flush()
+            os.fsync(stream.fileno())
+        tmp.replace(path)
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
 
 
 def _time(value):
@@ -98,6 +106,9 @@ def validate_operations(ops):
                 if not math.isfinite(d) or not 1 <= d <= 10 or not math.isfinite(s) or not 0 < s < 100000:
                     raise ValueError("旧复习状态无效")
                 _time(value["last_review_at"])
+                for timestamp_field in ("first_review_at", "due_at"):
+                    if value.get(timestamp_field) not in (None, ""):
+                        _time(value[timestamp_field])
                 if any(type(value.get(k, 0)) is not int or value.get(k, 0) < 0 for k in ("reps", "lapses")):
                     raise ValueError("旧复习次数无效")
         elif field == "deleted":

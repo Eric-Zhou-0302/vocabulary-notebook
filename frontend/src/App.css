@@ -351,10 +351,9 @@ h1, h2, h3 { text-wrap: balance; }
 }
 .word-card:hover { background: var(--surface-raised); border-color: var(--accent-dim); }
 .word-card-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.word-card-top .word-book-name { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 12px; font-size: 12px; }
+.word-card-top .word-book-name { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 12px; padding-right: 24px; font-size: 12px; }
 .word-book-name .navigation-icon { width: 14px; height: 14px; }
 .word-card-arrow { position: absolute; top: 22px; right: 20px; color: var(--text-muted); width: 16px; height: 16px; }
-.word-card-top .word-book-name { padding-right: 24px; }
 .word-card .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: 8px; padding-right: 20px; }
 .word-card .word { font-family: var(--font-display); font-size: 27px; font-weight: 600; line-height: 1.25; color: var(--heading); }
 .word-card .phonetic { font-size: 13px; color: var(--text-dim); }
@@ -529,7 +528,7 @@ select option { background: var(--surface); color: var(--text); }
   border-color: var(--border);
 }
 
-.btn-group { display: flex; gap: 12px; margin-top: 24px; }
+.btn-group { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
 
 /* 搜索、范围筛选和工具操作分层，窄屏按组换行。 */
 .word-list-page > .notebook-scope { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; border: 0; padding: 0; margin-bottom: 26px; }
@@ -663,39 +662,6 @@ select option { background: var(--surface); color: var(--text); }
 }
 .page-input:focus {
   border-color: var(--accent);
-}
-
-/* ─── Tabs ───────────────────────────────── */
-.tabs {
-  display: flex;
-  gap: 0;
-  margin-bottom: 28px;
-  border-bottom: 1px solid var(--border);
-}
-
-.tab {
-  padding: 10px 22px;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  cursor: pointer;
-  color: var(--text-dim);
-  border-bottom: 1px solid transparent;
-  margin-bottom: -1px;
-  background: none;
-  border-top: none;
-  border-left: none;
-  border-right: none;
-  font-family: var(--font-body);
-  transition: color 0.2s, border-color 0.2s;
-}
-
-.tab:hover { color: var(--text); }
-
-.tab.active {
-  color: var(--accent-text);
-  border-bottom-color: var(--accent);
 }
 
 /* ─── Toast ──────────────────────────────── */
@@ -855,13 +821,6 @@ select option { background: var(--surface); color: var(--text); }
   scroll-margin-bottom: 12px;
 }
 
-.flashcard-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 28px;
-}
-
 .flashcard {
   appearance: none;
   display: block;
@@ -997,36 +956,6 @@ select option { background: var(--surface); color: var(--text); }
   max-width: 320px;
 }
 
-.flashcard-actions {
-  display: flex;
-  gap: 20px;
-}
-
-.flashcard-progress {
-  font-size: 13px;
-  color: var(--text-muted);
-  font-family: var(--font-display);
-  letter-spacing: 0.04em;
-}
-
-.flashcard-done {
-  text-align: center;
-  padding: 48px;
-}
-
-.flashcard-done h2 {
-  font-family: var(--font-display);
-  font-size: 28px;
-  font-weight: 600;
-  color: var(--heading);
-  margin-bottom: 12px;
-}
-
-.flashcard-done p {
-  color: var(--text-dim);
-  margin-bottom: 24px;
-}
-
 .srs-rating-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1131,100 +1060,6 @@ select option { background: var(--surface); color: var(--text); }
   .srs-rating-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* ─── Spelling Test ──────────────────────── */
-.spelling-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 24px;
-}
-
-.spelling-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 2px;
-  padding: 44px;
-  text-align: center;
-  width: 100%;
-  max-width: 500px;
-}
-
-.spelling-definition {
-  font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 500;
-  color: var(--heading);
-  margin-bottom: 24px;
-  letter-spacing: 0.02em;
-}
-
-.spelling-input {
-  max-width: 320px;
-  text-align: center;
-  font-size: 22px;
-  font-family: var(--font-display);
-  letter-spacing: 0.04em;
-  border-bottom-width: 2px;
-}
-
-.spelling-feedback {
-  margin-top: 14px;
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.03em;
-}
-.spelling-feedback.correct { color: var(--success); }
-.spelling-feedback.wrong   { color: var(--error); }
-
-.spelling-results { text-align: center; }
-
-.spelling-results h2 {
-  font-family: var(--font-display);
-  font-size: 26px;
-  color: var(--heading);
-  margin-bottom: 14px;
-}
-
-.spelling-results .stats {
-  font-size: 17px;
-  margin-bottom: 24px;
-  color: var(--text-dim);
-}
-.spelling-results .stats span {
-  font-weight: 700;
-  color: var(--success);
-}
-.spelling-results .stats span.wrong-count {
-  color: var(--error);
-}
-
-.wrong-list {
-  text-align: left;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 2px;
-  padding: 18px 22px;
-  margin: 0 auto 24px;
-  max-width: 420px;
-}
-
-.wrong-list h3 {
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 10px;
-  color: var(--error);
-}
-
-.wrong-list li {
-  font-size: 14px;
-  padding: 5px 0;
-  list-style: inside;
-  color: var(--text-dim);
-  border-bottom: 1px solid var(--border);
-}
-.wrong-list li:last-child { border-bottom: none; }
-
 /* ─── Export Dropdown ────────────────────── */
 .export-wrapper { position: relative; display: inline-block; }
 
@@ -1235,15 +1070,15 @@ select option { background: var(--surface); color: var(--text); }
   margin-top: 6px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 2px;
+  border-radius: 8px;
   overflow: hidden;
   z-index: 100;
-  min-width: 130px;
+  min-width: 196px;
   box-shadow: var(--shadow-modal);
 }
 
 .export-menu button {
-  display: block;
+  display: flex;
   width: 100%;
   padding: 10px 18px;
   text-align: left;
@@ -1256,6 +1091,10 @@ select option { background: var(--surface); color: var(--text); }
   font-family: var(--font-body);
   transition: all 0.15s;
   border-bottom: 1px solid var(--border);
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 44px;
 }
 .export-menu button:last-child { border-bottom: none; }
 .export-menu button:hover {
@@ -1267,8 +1106,9 @@ select option { background: var(--surface); color: var(--text); }
 .detail-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 2px;
+  border-radius: var(--radius-panel);
   padding: 36px;
+  overflow-wrap: anywhere;
 }
 
 .detail-word {
@@ -1325,12 +1165,15 @@ select option { background: var(--surface); color: var(--text); }
 .modal {
   background: var(--surface-raised);
   border: 1px solid var(--border-light);
-  border-radius: 2px;
+  border-radius: var(--radius-panel);
   padding: 32px;
   width: 90%;
   max-width: 480px;
   animation: modalIn 0.3s var(--ease-out);
   box-shadow: var(--shadow-modal);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .modal h2 {
@@ -1428,13 +1271,8 @@ select option { background: var(--surface); color: var(--text); }
 @media (max-width: 520px) { .provider-options { grid-template-columns: 1fr; gap: 10px; } .model-settings .provider-option { padding: 14px; } .settings-panel { padding: 18px 14px; } }
 
 /* 共享控件在深浅色、长内容与触屏上保持一致。 */
-.export-menu { min-width: 196px; border-radius: 8px; }
-.export-menu button { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 44px; }
 .export-menu button span { font-size: 12px; color: var(--text-muted); }
-.detail-card { border-radius: var(--radius-panel); overflow-wrap: anywhere; }
-.modal { max-height: calc(100dvh - 40px); overflow-y: auto; overscroll-behavior: contain; border-radius: var(--radius-panel); }
 .word-organize, .notebook-form { border-radius: var(--radius-panel); }
-.btn-group { flex-wrap: wrap; }
 @media (max-width: 900px) and (min-width: 601px) {
   .alphabet-nav { grid-template-columns: repeat(14, minmax(0, 1fr)); }
   .alphabet-nav .alpha-all { grid-column: span 2; }

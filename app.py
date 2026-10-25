@@ -1,14 +1,13 @@
 """词汇笔记本 — FastAPI 后端"""
 import asyncio
 import csv
-import html as html_mod
 import io
 import ipaddress
 import math
 import json
+import logging
 import os
 import re
-import socket
 import threading
 import uuid
 from contextlib import asynccontextmanager
@@ -24,7 +23,6 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fpdf import FPDF
 
 import config
 from event_broadcast import EventBroadcast
@@ -32,49 +30,48 @@ import fsrs
 import sync_storage
 from drive_sync import DriveSync
 import instance_lock
+from pdf_export import DEFAULT_CJK_FONT_PATH as _CJK_FONT_PATH
+from pdf_export import _build_pdf as _build_pdf
+from pdf_export import PdfExportError, resolve_cjk_font
 
 # ─── App ──────────────────────────────────────────────────
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _event_queue, _enrich_queue
+    global _event_queue, _enrich_queue, _enrich_current, _enrich_batch_total, _enrich_batch_done
     cache_lock = instance_lock.acquire(DATA_FILE)
-    # 启动时校验配置
     try:
         provider = config.get_provider()
         config.get_sync_config()
+        config.get_srs_config()
         print(f"  [config] provider: {provider}")
-    except RuntimeError as e:
-        print(f"  [config] 配置错误：{e}")
-        cache_lock.close()
-        raise
-    try:
         load_words()  # fail before starting workers if the local cache is damaged
-    except Exception:
-        cache_lock.close()
-        raise
-    _new_enrichment_candidates.clear()
-    _enrich_states.clear()
-    _event_queue = EventBroadcast()
-    _enrich_queue = asyncio.Queue()
-    worker_task = asyncio.create_task(_enrich_worker())
-    backup_task = asyncio.create_task(_periodic_backup_loop())
-    sync_task = asyncio.create_task(_cloud_sync_loop())
-    try:
-        yield
-    finally:
-        cloud.cancel_auth()
-        sync_task.cancel()
-        backup_task.cancel()
-        worker_task.cancel()
-        for t in (sync_task, backup_task, worker_task):
+        _new_enrichment_candidates.clear()
+        _enrich_states.clear()
+        _enriching_ids.clear()
+        _enrich_current = None
+        _enrich_batch_total = _enrich_batch_done = 0
+        _event_queue = EventBroadcast()
+        _enrich_queue = asyncio.Queue()
+        tasks = [asyncio.create_task(worker()) for worker in
+                 (_enrich_worker, _periodic_backup_loop, _cloud_sync_loop)]
+        try:
+            yield
+        finally:
             try:
-                await t
-            except asyncio.CancelledError:
-                pass
-        await asyncio.to_thread(cloud.lock.acquire)
-        cloud.lock.release()
+                cloud.cancel_auth()
+            finally:
+                for task in tasks:
+                    task.cancel()
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                for result in results:
+                    if isinstance(result, Exception):
+                        logging.getLogger("uvicorn").error("[shutdown] background task failed: %s", type(result).__name__)
+                # 已提交的同步线程退出后，才释放本地词库的进程锁。
+                await asyncio.to_thread(cloud.lock.acquire)
+                cloud.lock.release()
+    finally:
         cache_lock.close()
 
 
@@ -112,7 +109,7 @@ async def _periodic_backup_loop():
             print(f"  [backup] failed: {type(e).__name__}: {e}")
 
 
-app = FastAPI(title="Vocabulary Notebook", version="1.1.0", lifespan=lifespan)
+app = FastAPI(title="Vocabulary Notebook", version="1.2.0", lifespan=lifespan)
 
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
 
@@ -175,347 +172,6 @@ _enrich_batch_done: int = 0
 # 万一主文件被误删/损坏/被代码错误重写，备份至少落后 ≤10 分钟。
 BACKUP_INTERVAL_SECONDS = 600  # 10 分钟
 
-
-
-# ─── PDF 字体路径 (fpdf2 纯 Python，零系统依赖) ──────────
-
-_CJK_FONT_PATH = "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"
-if not os.path.exists(_CJK_FONT_PATH):
-    _CJK_FONT_PATH = None  # 兜底：中文显示为空白，但不会崩溃
-
-
-# ─── PDF 表格化导出 ─────────────────────────────────────
-
-def _estimate_lines(text: str, col_w_mm: float, font_size_pt: float) -> int:
-    """估算文本在指定列宽（mm）和字号（pt）下需要多少行。
-
-    启发式：CJK 字符 ≈ 1em，全角标点 ≈ 0.85em，
-    ASCII 字母 ≈ 0.5em，数字 / 半角标点 ≈ 0.55em。
-    """
-    if not text:
-        return 0
-    em = font_size_pt * 0.3528  # pt → mm
-    total_lines = 0
-    for para in text.split("\n"):
-        w = 0.0
-        for ch in para:
-            cp = ord(ch)
-            if 0x2E80 <= cp <= 0x303E or 0x3400 <= cp <= 0x9FFF or 0xF900 <= cp <= 0xFAFF:
-                w += em * 1.0  # CJK / 全角
-            elif 0xFF00 <= cp <= 0xFFEF:
-                w += em * 0.85  # 全角标点
-            elif ch.isascii() and ch.isalpha():
-                w += em * 0.50  # Latin
-            else:
-                w += em * 0.55  # 数字 / 半角标点 / 其他
-        total_lines += max(1, math.ceil(w / col_w_mm))
-    return total_lines
-
-
-def _build_pdf(words: list[dict], today: str, use_cjk: bool, cjk_font_path: Optional[str]) -> bytes:
-    """渲染词汇笔记本 PDF：密集表格布局，~20 词/页。
-
-    设计: Scholar's Compact
-    - 顶栏: 标题 + 日期 + 计数 + 双线分割
-    - 表头: 序号 / 单词 + 音标 / 释义 / 例句
-    - 行: 斑马纹（极淡米色），超细分隔线
-    - 字: 单词 Times Bold, 音标 Courier Italic, 释义 Helvetica, 例句 Italic
-    - 底栏: 页码 + 总数
-    """
-
-    # ── 字体注册 ──
-    class _VocabPDF(FPDF):
-        def __init__(self):
-            super().__init__("P", "mm", "A4")
-            self._cjk = use_cjk
-            self._word_count = len(words)
-            if use_cjk:
-                self.add_font("CJK", "", cjk_font_path)
-                self.add_font("CJK", "B", cjk_font_path)
-                self.add_font("CJK", "I", cjk_font_path)
-
-    pdf = _VocabPDF()
-
-    # ── 排版常量 ──
-    M_L, M_R, M_T, M_B = 16, 16, 14, 16
-    pdf.set_margins(M_L, M_T, M_R)
-    pdf.set_auto_page_break(False)  # 手动控制分页
-    pdf.set_left_margin(M_L)
-    pdf.set_right_margin(M_R)
-    pdf.set_top_margin(M_T)
-    pdf.set_auto_page_break(False)
-
-    PAGE_W = pdf.w  # 210
-    CONTENT_W = PAGE_W - M_L - M_R  # 178
-
-    # 列宽（mm）
-    COL_NUM_W = 8
-    COL_WORD_W = 36
-    COL_DEF_W = 86
-    COL_EX_W = CONTENT_W - COL_NUM_W - COL_WORD_W - COL_DEF_W  # 48
-
-    COL_X = {
-        "num": M_L,
-        "word": M_L + COL_NUM_W,
-        "def": M_L + COL_NUM_W + COL_WORD_W,
-        "ex": M_L + COL_NUM_W + COL_WORD_W + COL_DEF_W,
-    }
-
-    # 行高常量
-    LH_DEF = 8.5 * 0.3528 * 1.22  # 8.5pt × 1.22 leading ≈ 3.66mm
-    LH_EX = 7.5 * 0.3528 * 1.22   # 7.5pt × 1.22 leading ≈ 3.23mm
-    ROW_PAD_TOP = 1.6
-    ROW_PAD_BOT = 1.4
-    MIN_ROW_H = 8.8
-
-    # 顶栏 + 表头占用高度
-    HEADER_BAND_H = 11
-    HEADER_RULE_GAP = 1.2
-    COL_HEADER_H = 6.2
-    COL_HEADER_GAP = 1.0
-    TABLE_TOP_OFFSET = HEADER_BAND_H + HEADER_RULE_GAP + COL_HEADER_H + COL_HEADER_GAP
-    TABLE_BOTTOM = pdf.h - M_B  # 281
-
-    # ── 配色 ──
-    C_TITLE = (38, 38, 38)
-    C_META = (120, 116, 108)
-    C_RULE = (180, 172, 156)        # 主分割线
-    C_RULE_LITE = (215, 210, 196)   # 行间细线
-    C_ZEBRA = (247, 243, 232)       # 斑马米色
-    C_NUM = (170, 162, 142)         # 序号灰
-    C_WORD = (20, 20, 20)
-    C_PHON = (130, 130, 130)
-    C_DEF = (60, 60, 60)
-    C_EX = (110, 110, 110)
-    C_HEADER_BG = (50, 46, 40)      # 表头深色背景
-    C_HEADER_FG = (245, 240, 228)
-
-    sans = "CJK" if use_cjk else "Helvetica"
-    serif = "CJK" if use_cjk else "Times"
-    mono = "CJK" if use_cjk else "Courier"
-
-    # ── 头部 ──
-    def draw_header():
-        y = M_T
-        # 标题行
-        pdf.set_xy(M_L, y)
-        pdf.set_font(serif, "B", 14)
-        pdf.set_text_color(*C_TITLE)
-        title = "VOCABULARY NOTEBOOK"
-        pdf.cell(80, 6.5, title)
-        # 副标题（中文）
-        if use_cjk:
-            pdf.set_xy(M_L, y + 6.5)
-            pdf.set_font(sans, "", 8.5)
-            pdf.set_text_color(*C_META)
-            pdf.cell(80, 4, "词 汇 笔 记 本 · 导 出")
-        # 元信息右对齐
-        pdf.set_xy(M_L, y)
-        pdf.set_font(mono, "", 8)
-        pdf.set_text_color(*C_META)
-        meta = f"{today}  ·  {len(words):>4} WORDS"
-        pdf.cell(CONTENT_W, 6.5, meta, align="R")
-        if use_cjk:
-            pdf.set_xy(M_L, y + 6.5)
-            pdf.set_font(sans, "", 7.5)
-            pdf.cell(CONTENT_W, 4, f"导出日期 {today}    共 {len(words)} 个单词", align="R")
-        # 双线分割
-        pdf.set_draw_color(*C_RULE)
-        pdf.set_line_width(0.4)
-        pdf.line(M_L, M_T + HEADER_BAND_H, M_L + CONTENT_W, M_T + HEADER_BAND_H)
-        pdf.set_line_width(0.15)
-        pdf.line(M_L, M_T + HEADER_BAND_H + 1.2, M_L + CONTENT_W, M_T + HEADER_BAND_H + 1.2)
-
-    # ── 表头 ──
-    def draw_col_header(y: float):
-        h = COL_HEADER_H
-        pdf.set_fill_color(*C_HEADER_BG)
-        pdf.rect(M_L, y, CONTENT_W, h, style="F")
-        pdf.set_font(sans if use_cjk else "Helvetica", "B", 8.5)
-        pdf.set_text_color(*C_HEADER_FG)
-        labels = [
-            ("#",       COL_X["num"], COL_NUM_W, "C"),
-            ("WORD",    COL_X["word"], COL_WORD_W, "L"),
-            ("DEFINITION", COL_X["def"], COL_DEF_W, "L"),
-            ("EXAMPLE", COL_X["ex"], COL_EX_W, "L"),
-        ]
-        for txt, x, w, align in labels:
-            pdf.set_xy(x + 2, y + 1.6)
-            pdf.cell(w - 4, h - 1.6, txt, align=align)
-        return y + h
-
-    # ── 表头后 ──
-    def draw_table_separator(y: float):
-        pdf.set_draw_color(*C_RULE_LITE)
-        pdf.set_line_width(0.15)
-        pdf.line(M_L, y, M_L + CONTENT_W, y)
-        return y
-
-    # ── 单行 ──
-    def draw_row(idx: int, item: dict, y: float, zebra: bool):
-        word = html_mod.unescape(item.get("word", "")).strip()
-        phonetic = html_mod.unescape(item.get("phonetic", "")).strip()
-        definition = html_mod.unescape(item.get("definition", "")).strip()
-        example = html_mod.unescape(item.get("example", "")).strip()
-
-        n_def = _estimate_lines(definition, COL_DEF_W - 4, 8.5)
-        n_ex = _estimate_lines(example, COL_EX_W - 4, 7.5)
-        text_h = n_def * LH_DEF + (n_ex * LH_EX + 1.0 if example else 0)
-        row_h = max(MIN_ROW_H, ROW_PAD_TOP + text_h + ROW_PAD_BOT)
-
-        # 斑马背景
-        if zebra:
-            pdf.set_fill_color(*C_ZEBRA)
-            pdf.rect(M_L, y, CONTENT_W, row_h, style="F")
-
-        # 序号（垂直居中）
-        pdf.set_font(serif, "B", 8.5)
-        pdf.set_text_color(*C_NUM)
-        num_h = 4.0
-        pdf.set_xy(COL_X["num"], y + (row_h - num_h) / 2)
-        pdf.cell(COL_NUM_W, num_h, f"{idx:>3}", align="C")
-
-        # 单词
-        pdf.set_xy(COL_X["word"] + 1.5, y + ROW_PAD_TOP)
-        pdf.set_font(serif, "B", 10.5)
-        pdf.set_text_color(*C_WORD)
-        pdf.cell(COL_WORD_W - 3, 4.4, word)
-        # 音标
-        if phonetic:
-            pdf.set_xy(COL_X["word"] + 1.5, y + ROW_PAD_TOP + 4.2)
-            pdf.set_font(mono, "I", 7)
-            pdf.set_text_color(*C_PHON)
-            pdf.cell(COL_WORD_W - 3, 3.2, phonetic)
-
-        # 释义
-        pdf.set_xy(COL_X["def"] + 1.5, y + ROW_PAD_TOP)
-        pdf.set_font(sans, "", 8.5)
-        pdf.set_text_color(*C_DEF)
-        lines_def = _wrap_lines(definition, COL_DEF_W - 3, 8.5)
-        cy = y + ROW_PAD_TOP
-        for ln in lines_def[:max(1, n_def)]:
-            pdf.set_xy(COL_X["def"] + 1.5, cy)
-            pdf.cell(COL_DEF_W - 3, LH_DEF, ln)
-            cy += LH_DEF
-
-        # 例句（缩进 + 斜体）
-        if example and n_ex > 0:
-            cy += 0.5
-            ex_text = f'“{example}”'
-            lines_ex = _wrap_lines(ex_text, COL_EX_W - 3, 7.5)
-            pdf.set_font(sans, "I", 7.5)
-            pdf.set_text_color(*C_EX)
-            for ln in lines_ex[:max(1, n_ex)]:
-                pdf.set_xy(COL_X["ex"] + 1.5, cy)
-                pdf.cell(COL_EX_W - 3, LH_EX, ln)
-                cy += LH_EX
-
-        # 行底分割线
-        pdf.set_draw_color(*C_RULE_LITE)
-        pdf.set_line_width(0.12)
-        pdf.line(M_L, y + row_h, M_L + CONTENT_W, y + row_h)
-        pdf.set_line_width(0.15)
-
-        return y + row_h
-
-    # ── 文本换行（基于宽度估算） ──
-    def _wrap_lines(text: str, max_w_mm: float, font_size_pt: float) -> list[str]:
-        """按列宽把文本切成行。CJK 字符可断，Latin 按词断。"""
-        if not text:
-            return [""]
-        em = font_size_pt * 0.3528
-        out: list[str] = []
-        for para in text.split("\n"):
-            cur = ""
-            cur_w = 0.0
-            # 按字符遍历，CJK 单字断、Latin 按空格切词
-            i = 0
-            tokens: list[str] = []
-            buf = ""
-            for ch in para:
-                cp = ord(ch)
-                if 0x2E80 <= cp <= 0x303E or 0x3400 <= cp <= 0x9FFF or 0xF900 <= cp <= 0xFAFF:
-                    if buf:
-                        tokens.append(buf)
-                        buf = ""
-                    tokens.append(ch)  # CJK 单字 token
-                elif ch == " ":
-                    if buf:
-                        tokens.append(buf)
-                        buf = ""
-                    tokens.append(" ")
-                else:
-                    buf += ch
-            if buf:
-                tokens.append(buf)
-
-            for tk in tokens:
-                w = 0.0
-                for ch in tk:
-                    cp = ord(ch)
-                    if 0x2E80 <= cp <= 0x303E or 0x3400 <= cp <= 0x9FFF or 0xF900 <= cp <= 0xFAFF:
-                        w += em * 1.0
-                    elif 0xFF00 <= cp <= 0xFFEF:
-                        w += em * 0.85
-                    elif ch.isascii() and ch.isalpha():
-                        w += em * 0.5
-                    else:
-                        w += em * 0.55
-                if cur_w + w <= max_w_mm or not cur:
-                    cur += tk
-                    cur_w += w
-                else:
-                    out.append(cur.rstrip())
-                    cur = tk.lstrip() if tk != " " else ""
-                    cur_w = w if tk != " " else 0
-            if cur:
-                out.append(cur.rstrip())
-        return out
-
-    # ── 页脚 ──
-    def draw_footer():
-        pdf.set_xy(M_L, pdf.h - M_B + 4)
-        pdf.set_font(sans if use_cjk else "Helvetica", "", 7.5)
-        pdf.set_text_color(*C_META)
-        left = "Vocab Notebook"
-        right = f"{pdf.page_no()} / {pdf.pages_count}"
-        pdf.cell(CONTENT_W / 2, 4, left)
-        pdf.cell(CONTENT_W / 2, 4, right, align="R")
-        # 细线
-        pdf.set_draw_color(*C_RULE_LITE)
-        pdf.set_line_width(0.15)
-        pdf.line(M_L, pdf.h - M_B + 3, M_L + CONTENT_W, pdf.h - M_B + 3)
-
-    # ── 渲染循环 ──
-    pdf.add_page()
-    draw_header()
-    y = M_T + TABLE_TOP_OFFSET
-    draw_table_separator(y - 0.5)
-    y = draw_col_header(y - 0.5)
-
-    for idx, item in enumerate(words, 1):
-        # 预估算行高，检查是否放得下
-        definition = html_mod.unescape(item.get("definition", ""))
-        example = html_mod.unescape(item.get("example", ""))
-        n_def_est = _estimate_lines(definition, COL_DEF_W - 4, 8.5)
-        n_ex_est = _estimate_lines(example, COL_EX_W - 4, 7.5)
-        text_h_est = n_def_est * LH_DEF + (n_ex_est * LH_EX + 1.0 if example else 0)
-        row_h_est = max(MIN_ROW_H, ROW_PAD_TOP + text_h_est + ROW_PAD_BOT)
-
-        # 放不下则分页
-        if y + row_h_est > TABLE_BOTTOM:
-            draw_footer()
-            pdf.add_page()
-            draw_header()
-            y = M_T + TABLE_TOP_OFFSET
-            draw_table_separator(y - 0.5)
-            y = draw_col_header(y - 0.5)
-
-        y = draw_row(idx, item, y, zebra=(idx % 2 == 0))
-
-    draw_footer()
-
-    return bytes(pdf.output())
 
 
 # RLock 允许同一线程重入，_enrich_in_background 可在锁内 load+save
@@ -642,7 +298,6 @@ def _review_stats_for(words: list[dict], now: datetime, daily_new_limit: int,
 
 async def enrich_word(word: str) -> tuple[str, str, str]:
     """调用配置好的 Provider 补充音标、释义和例句，返回 (phonetic, definition, example)。服务或格式错误抛出异常；仅明确的三字段空响应表示未识别词汇。"""
-    import logging
     logger = logging.getLogger("uvicorn")
 
     prompt = f'''For the English word "{word}", provide its dictionary
@@ -1166,8 +821,11 @@ def export_words(
         )
 
     if format == "pdf":
-        use_cjk = _CJK_FONT_PATH is not None
-        pdf_bytes = _build_pdf(words, today, use_cjk, _CJK_FONT_PATH)
+        try:
+            font_path = resolve_cjk_font(_CJK_FONT_PATH)
+            pdf_bytes = _build_pdf(words, today, font_path is not None, font_path)
+        except PdfExportError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
@@ -1241,7 +899,7 @@ async def enrich_missing(notebook_id: str = ""):
             if not w.get("definition", "").strip()
             and _enriching_ids.get(w["id"], 0) + _ENRICH_COOLDOWN >= now
         )
-        msg = f"没有需要补全的单词" if not in_cooldown else f"{in_cooldown} 个单词正在补全中或刚尝试过，请稍后"
+        msg = "没有需要补全的单词" if not in_cooldown else f"{in_cooldown} 个单词正在补全中或刚尝试过，请稍后"
         return {"enriched": 0, "message": msg}
 
     await _enqueue_enrich_batch([(w["id"], w["word"]) for w in missing])
@@ -1434,14 +1092,13 @@ async def _reject_unrecognized(word_id, word_text):
 async def _enrich_worker():
     """单 worker 串行调用模型，保留人工编辑内容。"""
     global _enrich_current, _enrich_batch_done
-    import logging
     logger = logging.getLogger("uvicorn")
-    logger.warning("[enrich-worker] started")
+    logger.info("[enrich-worker] started")
     while True:
         word_id, word_text = await _enrich_queue.get()
         _enrich_states[word_id] = {"status": "processing"}
         _enrich_current = word_text
-        logger.warning(f"[enrich-worker] picked: {word_text!r} id={word_id}")
+        logger.debug("[enrich-worker] picked id=%s", word_id)
         try:
             current_data = load_words()
             current_word = next((w for w in current_data["words"] if w["id"] == word_id), None)
@@ -1527,11 +1184,10 @@ async def _enrich_worker():
 def _enrich_post_check(word: str, phonetic: str, definition: str, example: str) -> tuple[bool, str]:
     """后处理校验 — 返回 (ok, reason)。
 
-    三道闸:拼写(pyenchant) / 例句语种(langdetect) / 释义 POS 行头(纯正则)。
-    任一失败 → 严格模式:不写回,清冷却,推 SSE enrich_failed 事件。
-    库未装时优雅降级(log warning 后跳过该闸)。
+    可选词典拼写校验，以及例句中文字符、释义 POS 行头检查。
+    任一失败时不写回，清冷却并推送 enrich_failed 事件。
+    未安装 pyenchant 时跳过词典检查，其他检查仍然执行。
     """
-    import logging
     logger = logging.getLogger("uvicorn")
 
     # 1. 拼写 — 拦截 conffin/cublic/fivre/weav/undeter 这类
@@ -1552,8 +1208,7 @@ def _enrich_post_check(word: str, phonetic: str, definition: str, example: str) 
         logger.warning(f"[enrich-check] {word} — 拼写检查异常: {type(e).__name__}: {e}")
 
     # 2. 例句含中文字符 → 拦截(algebra 中文例句这类)
-    # 不做通用语种检测:langdetect 在 < 10 词的例句上误判率 30%+,
-    # 会把短英文误判为 ro/af/so 等。直接看是否含中文更稳。
+    # 短例句的通用语种判断不稳定，只拦截明确的中文字符。
     if example and example.strip() and re.search(r"[一-鿿]", example):
         return False, f"例句包含中文字符: {example!r}"
 
@@ -1791,7 +1446,7 @@ def _word_operation_ids(data, word_id):
 # ─── 静态文件（生产模式）──────────────────────────────────
 # 静态资源挂载必须在 catch-all 路由之前，否则 /assets/* 会被当 SPA 路由吞掉
 
-if STATIC_DIR.exists():
+if (STATIC_DIR / "assets").is_dir():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
 
@@ -1809,22 +1464,12 @@ async def serve_spa():
 @app.get("/{full_path:path}")
 async def serve_spa_fallback(full_path: str):
     """所有非 API/非静态资源路径回退到 SPA，支持浏览器刷新和直接导航"""
+    if full_path == "api" or full_path.startswith("api/") or full_path == "assets" or full_path.startswith("assets/"):
+        raise HTTPException(status_code=404, detail="资源不存在")
     index_path = STATIC_DIR / "index.html"
     if not index_path.exists():
         raise HTTPException(status_code=404, detail="前端未构建")
     return HTMLResponse(index_path.read_text(encoding="utf-8"))
-
-
-# ─── 网络工具 ─────────────────────────────────────────────
-
-def get_lan_ip() -> str:
-    """获取本机局域网 IP"""
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("8.8.8.8", 80))
-            return s.getsockname()[0]
-    except OSError:
-        return ""
 
 
 # ─── 启动入口 ─────────────────────────────────────────────
@@ -1832,17 +1477,16 @@ def get_lan_ip() -> str:
 if __name__ == "__main__":
     import uvicorn
 
-    host = "0.0.0.0"
+    host = "127.0.0.1"
     port = 1400
-    lan_ip = get_lan_ip()
 
     print("═" * 52)
     print("  词汇笔记本  Vocabulary Notebook")
     print("═" * 52)
     print(f"  本地访问  →  http://localhost:{port}")
-    if lan_ip:
-        print(f"  局域网    →  http://{lan_ip}:{port}")
     print("═" * 52)
     print()
 
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    # SSE 连接会持续等待事件，限制关闭宽限期，避免正常退出被空闲浏览器阻塞。
+    uvicorn.run(app, host=host, port=port, log_level="warning", proxy_headers=False,
+                timeout_graceful_shutdown=5)

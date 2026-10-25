@@ -1,325 +1,182 @@
-<div align="center">
-  <h1>📖 Vocabulary Notebook</h1>
-  <p><strong>把单词记下来，也真正记住它。</strong></p>
-  <p>
-    一个本地优先的 AI 词汇笔记本。写下单词，自动补全音标、释义与例句，
-    <br />
-    再用 FSRS 间隔复习，把“见过”变成“记得”。
-  </p>
-  <p>
-    <a href="https://github.com/Eric-Zhou-0302/vocabulary-notebook">
-      <img alt="Local-first" src="https://img.shields.io/badge/Local--first-Your_Data-9b7137?style=for-the-badge&labelColor=292522" />
-    </a>
-    <a href="https://fastapi.tiangolo.com/">
-      <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&labelColor=292522" />
-    </a>
-    <a href="https://react.dev/">
-      <img alt="React" src="https://img.shields.io/badge/React-Frontend-61dafb?style=for-the-badge&labelColor=292522" />
-    </a>
-    <a href="https://opensource.org/licenses/MIT">
-      <img alt="License" src="https://img.shields.io/badge/License-MIT-8b5cf6?style=for-the-badge&labelColor=292522" />
-    </a>
-  </p>
-</div>
+# Vocabulary Notebook
 
-<p align="center">
-  <img
-    src="assets/vocabulary-notebook-cover.jpg"
-    alt="Vocabulary Notebook — 本地优先的 AI 词汇笔记本"
-    width="960"
-  />
-</p>
+[![CI](https://github.com/Eric-Zhou-0302/vocabulary-notebook/actions/workflows/ci.yml/badge.svg)](https://github.com/Eric-Zhou-0302/vocabulary-notebook/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
----
+一个本地优先的英文词汇笔记本：记录单词，使用 Ollama 或 DeepSeek 补全音标、中文释义与例句，再通过间隔复习巩固记忆。
 
-当前版本：**v1.1.0** · [更新日志](CHANGELOG.md)
+![Vocabulary Notebook](assets/vocabulary-notebook-cover.jpg)
 
-## 它做什么
+当前版本：**1.2.0**。默认分支上的后续改动见 [更新日志](CHANGELOG.md)。
 
-很多单词软件让你记住一个账号，却不一定让你记住单词。
+## 功能
 
-Vocabulary Notebook 把词库留在本地：添加一个单词后，Ollama 或 DeepSeek 会在后台补全 IPA 音标、中文释义和例句；学完之后，FSRS 根据你的真实记忆状态安排下一次复习。
+- **单词与单词本**：按主题管理词汇；同词可加入多本，每本独立保存内容与复习进度。
+- **AI 补全**：支持本地 Ollama 和 DeepSeek API，提供任务进度、失败提示与缺失内容重试。
+- **间隔复习**：四档记忆评分、每日新词额度、下次复习间隔预览；也可按字母或随机顺序只读翻卡。
+- **查找与导出**：搜索、日期/首字母筛选、添加时间排序，以及 PDF、CSV、JSON 导出。
+- **同步与备份**：可选 Google Drive 桌面文件夹或 API 直连；支持完整学习历史备份和合并导入。
+- **界面与操作**：深浅色主题、手机布局、桌面可收起侧栏，以及搜索、翻卡和评分快捷键。
 
-| 能力 | 体验 |
-|---|---|
-| **模型设置** | 网页切换 Ollama / DeepSeek，自动获取 DeepSeek 可用模型并提醒失效配置 |
-| **AI 自动补全** | 只输入单词，后台生成音标、中文释义和自然例句 |
-| **实时进度** | SSE 推送补全过程；添加页用轻量轮询兜底，断开或错过事件后也能显示结果 |
-| **即时记忆** | 添加页保留最近 10 个新词，释义、音标和例句生成后直接展示 |
-| **每日复习** | FSRS-4.5 调度，按“重来 / 困难 / 良好 / 简单”调整间隔 |
-| **多个单词本** | 按主题收录，同词可加入多本；按本查看、导出及独立复习，支持批量加入或移动 |
-| **全部单词** | 按 A–Z 或随机顺序翻卡，不改动复习进度 |
-| **主动回忆** | 闪卡和拼写测试并存，不只做选择题式识别 |
-| **随时带走** | 一键导出 PDF、CSV 或 JSON，数据不被平台锁住 |
-| **添加时间排序** | 最新在前（默认）或最早在前，也保留原顺序和字母排序；分页、导出沿用所选排序 |
-| **舒服耐看** | 深色 / 浅色主题，简体 / 繁体切换，完整键盘操作 |
-
----
+应用用于个人电脑本地运行。后端只监听 `127.0.0.1:1400`，不提供公网部署或多用户登录功能。跨电脑学习使用同步功能，详见 [Drive 同步指南](docs/DRIVE_SYNC.md)。
 
 ## 快速开始
 
-### 1. 获取项目
+### 环境
+
+- Python **3.11+**；CI 覆盖 3.11 和 3.12。
+- 使用已提交的前端构建文件时，不需要 Node.js。
+- 修改前端需 Node.js **22.13+（22.x）或 24+** 及 npm。开发与检查使用项目本地依赖。
+- 以下命令适用于 macOS / Linux shell。PDF 中文导出需要可用的 Unicode 字体，见下文。
+
+### 安装与运行
 
 ```bash
 git clone https://github.com/Eric-Zhou-0302/vocabulary-notebook.git
 cd vocabulary-notebook
+python3.11 -m venv .venv
+./.venv/bin/python -m pip install --upgrade pip setuptools
+./.venv/bin/python -m pip install -r requirements.txt
+
+# 仅首次创建配置，不覆盖已有设置。
+test -f config.json || cp config.json.example config.json
+./.venv/bin/python app.py
 ```
 
-### 2. 安装后端依赖
+打开 [http://localhost:1400](http://localhost:1400)。`python app.py` 会托管 `frontend/dist`；不需要另外运行前端服务器或启动脚本。
 
-使用项目独立虚拟环境，避免污染系统 Python：
+通过「设置与工具 → 模型设置」配置补全服务。没有连接模型时，仍可浏览已有词库和复习。
+
+### 配置模型
+
+**Ollama**：先启动本机或自托管的 Ollama 服务，在模型设置页填写服务地址和实际已安装的模型名称。默认地址为 `http://localhost:11434/api/generate`。
+
+**DeepSeek**：在 [DeepSeek 开放平台](https://platform.deepseek.com/api_keys)创建 API Key，填写后刷新模型列表、选择模型并保存。模型列表由官方接口获取，不在项目中写死。
+
+网页保存配置后立即生效。已有 Key 不会回传浏览器，留空保留原值。若直接修改 `config.json`，需重启后端。配置结构见 [config.json.example](config.json.example)。
+
+可选启用本机词典拼写校验：确认系统已有 Enchant 库及 `en_US` 词典后，运行 `./.venv/bin/python -m pip install -r requirements-spellcheck.txt`。系统要求见 [PyEnchant 安装说明](https://pyenchant.github.io/pyenchant/install.html)。未安装时跳过词典检查，例句中文字符和释义格式检查仍然执行。
+
+### 从旧版本升级
+
+先停止应用，将词库 `words.json`、配置 `config.json` 和凭据目录 `.secrets` 备份到仓库外。低于 Python 3.11 的虚拟环境需用新解释器重建并安装依赖；新环境验证成功前保留旧环境。
+
+首次读取旧词库会保留 `words.json.legacy.bak`，再迁移为支持同步的缓存。不要用旧版程序写入新缓存；迁移与回退说明见 [Drive 同步指南](docs/DRIVE_SYNC.md#旧词库备份与升级)。新版只允许本机访问，跨电脑使用 Drive 同步，不再提供原来的局域网直连方式。
+
+## 日常使用
+
+桌面宽屏使用侧栏导航，默认展开，可收起为图标；窄屏使用顶部导航。「设置与工具」集中提供模型、同步、主题和快捷键设置。
+
+### 记录与整理
+
+添加页选择单词本、输入单词并保存，补全结果会出现在下方的最近记录中。新词首字母统一大写，其余字符保留；同一本中重复输入会显示已有记录，不重置原有复习进度。
+
+补全期间可继续使用应用。网络、授权或模型响应异常会保留记录供重试；只有明确判定无效且未被用户修改或复习的新空词条，才会自动移除。详情页可手动编辑。
+
+在单词列表中使用「整理单词」：
+
+- **加入单词本**：保留原词，目标本从新词开始复习，跳过已有同词。
+- **移动到此本**：保留复习进度；目标本存在同词时停止整批操作，避免覆盖。
+
+同一本内按拼写忽略大小写去重；跨本允许同词。只能删除空单词本，默认单词本始终保留。排序选择保存在当前浏览器中，筛选范围同时用于导出。
+
+### 复习
+
+「今日复习」根据到期记录和每日额度组成队列。先回忆再翻面，按记忆程度评分；选择“重来”的卡片会回到本轮队尾。默认每天引入 20 个新词，各本共用额度，可通过 `config.json` 的 `srs.daily_new_limit` 修改。
+
+「全部单词」按 A–Z 或随机顺序翻阅，不提交评分、不消耗新词额度。该模式只显示当前范围内有释义的词条，单次最多读取 10,000 条。
+
+| 快捷键 | 操作 |
+| --- | --- |
+| `/` | 聚焦单词列表搜索框 |
+| `?` | 打开快捷键帮助 |
+| `Space` / `Enter` | 翻开当前复习卡片 |
+| `1` / `2` / `3` / `4` | 重来 / 困难 / 良好 / 简单 |
+| `←` / `→` | 全部单词模式：上一张 / 翻面后下一张 |
+
+在输入框、下拉框、链接或可编辑区域操作时，复习快捷键不会抢占其键盘事件。
+
+### 导出与完整备份
+
+| 入口 | 内容与用途 |
+| --- | --- |
+| 单词列表 → PDF / CSV / JSON | 当前筛选下的词汇内容，适合打印、表格整理与二次处理 |
+| 同步与备份 → 下载完整备份 | 所有单词本、字段操作、删除标记及评分事件，适合迁移与恢复 |
+| 同步与备份 → 导入备份 | 合并导入完整备份或旧词库，不覆盖整个现有词库 |
+
+**普通列表导出不能替代完整学习历史备份。**
+
+PDF 使用 `fpdf2` 直接生成，不依赖 HTML 模板。macOS 默认尝试系统 Arial Unicode 字体；其他环境可指定覆盖所需中文、音标的静态 TTF / OTF 字体：
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp config.json.example config.json
+VOCABULARY_CJK_FONT=/absolute/path/to/font.ttf ./.venv/bin/python app.py
 ```
 
-### 3. 构建前端
+不支持 TTC 字体集合或可变字体。字体不可用、缺少字形或单条词汇超出一页容量时，导出会明确报错，可改用 CSV / JSON。项目不打包第三方字体，使用前请确认字体授权。
+
+## 开发与检查
+
+首次安装开发依赖：
 
 ```bash
-cd frontend
-npm install
-npm run build
-cd ..
+./.venv/bin/python -m pip install -r requirements-dev.txt
+npm --prefix frontend ci
 ```
 
-### 4. 启动
+需要热更新时，在两个终端分别运行：
 
 ```bash
-python app.py
+# 后端
+./.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 1400 --no-proxy-headers --timeout-graceful-shutdown 5 --reload
 ```
-
-打开 [http://localhost:1400](http://localhost:1400)，进入右上角「设置与工具 → 模型设置」配置 AI 服务，再开始添加单词。示例配置默认使用 Ollama；未连接模型时仍可浏览词库和复习。
-
-> 开发时可分别启动后端和 Vite 热更新服务，具体命令见下方「开发与验证」。日常使用直接运行 `python app.py` 即可。
-
----
-
-## 使用
-
-顶部学习导航提供「单词列表」「单词本」「复习」，「添加单词」作为独立操作。模型设置、云端同步、外观主题和快捷键帮助集中在右上角「设置与工具」；连接异常时入口会显示提示点。菜单支持键盘操作，按 Esc 或点击外部可关闭。
-
-### 用单词本整理
-
-顶部「单词本」可以创建、重命名和填写说明。原词库保留在「默认单词本」，列表顶部可切换查看范围；添加页可以指定归属本，搜索、日期、首字母、导出和复习均支持按本筛选。
-
-同一拼写可以同时存在于多个单词本，每本独立保存释义和复习进度。同一本内按拼写忽略大小写去重；跨本添加时会复用已有释义、音标和例句，并建立新的复习记录。
-
-列表中点击「整理单词」，勾选本页单词并选择目标本：
-
-- **加入单词本**：保留原词，在目标本创建新词，从新词开始复习；目标本已有同词时跳过。
-- **移动到此本**：带着当前词条和复习进度移动；若目标本已有同词，整批操作停止，避免覆盖不同的学习记录。
-
-在单词本卡片点击「复习本书」，或在复习页选择单词本，即可复习该本。每日新词上限仍由所有单词本共用；给一本中的单词评分不会改变另一本的同词进度。
-
-仅允许删除空单词本，默认单词本始终保留。单词本及归属变更沿用现有同步机制；多台设备应先全部更新到支持单词本的版本，再使用删除单词本功能，旧版客户端不识别新增的删除操作。
-
-### 按添加时间查看
-
-单词列表默认显示最新添加的单词。在“排序方式”中可以切换为“最早在前”、原顺序、A→Z 或 Z→A，选择保存在当前浏览器中。时间排序按实际时间比较，兼容时区和早期无时区的记录；排序会应用于分页及 PDF / CSV / JSON 导出，不改写词库或复习进度。
-
-### 写下一个单词
-
-点击“添加单词”，输入拼写即可。应用会立即保存记录，并把 AI 补全任务放到后台；音标、释义和例句生成后会实时出现在页面上。
-
-表单下方展示本次页面中最近添加的 10 个单词，可以边添加边记忆。补全失败会保留已保存的单词并提示原因，可从卡片进入编辑，或稍后在列表中“补全缺失”。
-
-重复输入当前单词本的已有词（忽略大小写）会在即时记忆区直接显示原来的释义、音标和例句，并把同一张卡移到最前面；不会在该本重复入库、重新生成或改动原来的添加时间和复习进度。新词入库时英文首字母统一大写，其余字符保持输入的大小写，如 `contract` → `Contract`、`iPhone` → `IPhone`，`API` 保持不变。旧词不会批量改名，需要特定拼写时可在详情编辑。
-
-若模型明确返回完整的空词典结果，或拼写校验确认无效，本次新建且未修改的空词条会自动移除，并在即时记忆中显示原因。网络、余额、授权或响应格式异常会保留记录供重试；已有、已修改、已复习的内容不会自动删除。生成中的人工释义优先保留，旧单词名称对应的结果不会写回改名后的词条。列表与添加页分别接收补全通知，断线时添加页也会轮询已保存的结果。
-
-### 每天复习
-
-进入“复习”页，先回忆，再翻面：
-
-| 按键 | 操作 |
-|---|---|
-| `Space` / `Enter` | 翻开当前卡片 |
-| `1` | 重来 |
-| `2` | 困难 |
-| `3` | 良好 |
-| `4` | 简单 |
-| `←` / `→` | 在“全部单词”模式切换卡片 |
-
-每次评分都会更新该词的难度、稳定性和下次复习时间。选择“重来”的卡片会回到本轮队尾，不会偷偷溜走。
-
-### 回看整本词库
-
-切换到“全部单词”，可以按 A–Z 浏览，也可以洗牌随机复习。这个模式只读，不提交评分、不消耗每日新词额度，也不会改变 SRS 状态。
-
-### 导出
-
-当前筛选结果可以导出为：
-
-- **PDF**：适合打印和离线阅读，内置 CJK 字体支持
-- **CSV**：适合 Excel、Numbers 或进一步分析
-- **JSON**：完整备份，方便迁移与二次开发
-
----
-
-## 选择你的 AI
-
-在右上角「设置与工具」中进入「模型设置」，通过供应商卡片选择 **Ollama** 或 **DeepSeek**。点击「保存配置」后立即生效，无需重启后端。
-
-词库始终保存在本地；使用 DeepSeek 时，待补全的单词和生成提示词会发送到 DeepSeek 官方服务。
-
-### Ollama：本地运行
-
-先启动 Ollama 并准备好模型，例如：
 
 ```bash
-ollama serve
-ollama run gemma4:26b
+# 前端
+npm --prefix frontend run dev -- --host 127.0.0.1
 ```
 
-如果 Ollama 已在运行，无需重复执行 `ollama serve`。模型名称可换成你实际安装的模型。
+开发页面为 [http://localhost:5173](http://localhost:5173)。不要同时启动两个后端操作同一份词库；实例锁会拒绝重复启动。
 
-在「模型设置」中：
-
-1. 点击 **Ollama** 供应商卡片。
-2. 填写 API 地址，默认是 `http://localhost:11434/api/generate`。
-3. 填写已安装的模型名称，例如 `gemma4:26b`，然后保存。
-
-### DeepSeek：云端调用
-
-1. 在 [DeepSeek 开放平台](https://platform.deepseek.com/api_keys)创建 API Key。
-2. 点击 **DeepSeek** 供应商卡片，填写 API Key。
-3. 点击「刷新列表」，从直接展示的可用模型列表中选择模型；选中项会显示金色边框和「已选择」。
-4. 点击「保存配置」。保存时会再次核验模型是否可用。
-
-已有密钥时，页面不会显示原始密钥；输入框留空会保留现有值。密钥保存在后端的 `config.json` 中，不回传浏览器。不要提交或分享包含真实密钥的配置文件。
-
-**模型列表与失效提醒：**
-
-- 模型列表通过 DeepSeek 官方 `GET /models` 接口获取，不固定写死模型名称。已有密钥时，打开设置页会自动获取，也可以手动刷新。
-- 当前配置的模型不在官方可用列表中时，设置页会单独标出「已不可用」，顶部状态也会提醒重新配置。选择可用模型后才能保存。
-- 网络或鉴权失败时会提示获取失败，不会据此判定模型已过期。
-
-### 手动配置（可选）
-
-也可以编辑根目录的 `config.json`：`provider` 为 `ollama` 或 `deepseek`，对应配置分别保存在同名字段中，结构参见 [`config.json.example`](config.json.example)。DeepSeek 模型名称应以官方接口当前返回的列表为准。
-
-网页保存会同步更新配置文件和运行中的配置；**手动修改文件后，需要重启后端才能生效**。
-
----
-
-## 复习机制
-
-每日复习使用 FSRS-4.5，根据每个单词的难度（Difficulty）与记忆稳定性（Stability）估算遗忘概率，并动态安排下一次出现的时间。
-
-```text
-添加单词
-   │
-   ├── AI 补全音标、释义、例句
-   │
-   ▼
-首次复习 ──评分──> 更新记忆状态 ──> 计算下次到期时间
-   ▲                                      │
-   └──────────────── 到期后重新进入队列 ──┘
+```bash
+make check    # Python/JS 静态检查、前后端测试、前端构建
+make lint    # 仅静态检查
+make test    # 仅测试
+make build   # 更新 frontend/dist
 ```
 
-- 默认每天引入 20 个新词
-- 评分按钮会预览预计的下次间隔
-- 新词额度由首次复习时间推导，重启服务不会清零
-- 旧词无需迁移，第一次评分时才写入 `srs` 字段
-- 顶部“复习”角标会显示当前待复习数量
+没有 `make` 时，使用 [贡献指南](CONTRIBUTING.md) 中的等价命令。**修改前端后必须构建并一并提交 `frontend/dist`**，否则 `python app.py` 仍会显示旧页面。
 
-调整每日新词上限：
-
-```json
-{
-  "srs": {
-    "daily_new_limit": 20
-  }
-}
-```
-
----
-
-## 工作流
-
-```text
-┌─────────────────┐       REST + SSE       ┌──────────────────────┐
-│ React + Vite UI │ ◄────────────────────► │ FastAPI · port 1400  │
-└─────────────────┘                         └──────────┬───────────┘
-                                                     │
-                              ┌──────────────────────┼──────────────────┐
-                              ▼                      ▼                  ▼
-                        words.json          Ollama / DeepSeek       FSRS-4.5
-                       本地原子写入           AI 内容补全           复习调度
-```
-
-后端会用锁保护读写，并通过临时文件原子替换 `words.json`；检测到数据损坏时会保留备份。前端构建产物由 FastAPI 直接托管，因此部署时不需要额外的 Web 服务。
-
----
+CI 在 push 和 pull request 时运行，并检查提交的前端构建是否最新。自动测试使用临时目录和模拟请求，不等于真实 OAuth 或跨电脑同步验收。更多结构、测试和兼容性约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 项目结构
 
 ```text
-vocabulary-notebook/
-├── app.py                 # FastAPI 应用、API、SSE 与静态文件托管
-├── config.py              # Provider 与 SRS 配置
-├── fsrs.py                # FSRS-4.5 调度算法
-├── words.json             # 本地词库，已被 Git 忽略
-├── templates/             # PDF 导出模板
-├── tests/                 # 后端、提示词与复习测试
-└── frontend/
-    ├── src/
-    │   ├── pages/         # 单词列表、详情、新建、复习
-    │   ├── components/    # 闪卡、导出、模型状态等组件
-    │   └── api.js         # 前端 API 封装
-    └── dist/              # 生产构建产物
+app.py                    FastAPI 路由、生命周期、补全队列、静态托管
+config.py                 配置校验与原子保存
+pdf_export.py             PDF 排版、字体选择与字形校验
+fsrs.py                   复习调度
+sync_storage.py           操作历史、合并与本地原子写入
+drive_sync.py             Drive 文件夹 / OAuth 同步
+instance_lock.py          同一词库的进程锁
+event_broadcast.py        SSE 多订阅者事件广播
+frontend/src/             React 页面、组件、Hooks 与样式
+frontend/test/            Node 原生前端逻辑测试
+frontend/dist/            FastAPI 直接托管的构建文件
+tests/                    后端回归测试与隔离客户端
+docs/                     Drive 同步与备份指南
+.github/                  CI、Issue / PR 模板
 ```
 
----
+## 数据与边界
 
-## 开发与验证
+- `words.json` 是本机词库缓存；应用定期生成 `words.json.bak`，迁移旧词库时保留迁移前副本。
+- `config.json`、`.secrets`、词库与备份均被 Git 忽略。不要将它们放进 Issue、PR 或公开日志。
+- Ollama 可处理本地补全；DeepSeek 模式会发送待补全单词和上下文到其 API。网页字体默认从 Google Fonts 加载，网络不可用时回退系统字体。
+- Drive 同步仅在用户主动连接后启用，配置与凭据保留在各自电脑。操作日志不会自动清空，以支持离线设备重新合并。
+- PDF 字体要求见上文；Google 授权和跨设备传输的配置与限制见 [Drive 指南](docs/DRIVE_SYNC.md)。
 
-需要热更新时，在项目根目录打开两个终端，分别启动后端和前端：
+## 贡献与许可
 
-```bash
-# 终端一：后端
-./.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 1400 --no-proxy-headers --reload
-```
+问题反馈请使用 [Issue 模板](https://github.com/Eric-Zhou-0302/vocabulary-notebook/issues/new/choose)。提交改动前阅读 [贡献指南](CONTRIBUTING.md)。
 
-```bash
-# 终端二：前端
-cd frontend && npm run dev -- --host 127.0.0.1
-```
-
-开发页面为 [http://localhost:5173](http://localhost:5173)，在各终端按 `Ctrl+C` 停止对应服务。
-
-运行后端测试：
-
-```bash
-./.venv/bin/pytest -q
-```
-
-前端代码修改后必须重新构建，FastAPI 才能托管最新版本：
-
-```bash
-cd frontend && npm run build
-```
-
----
-
-## 数据与隐私
-
-- 单词、复习状态和历史记录只写入本机 `words.json`
-- `words.json` 与真实 `config.json` 均不会进入 Git
-- Ollama 模式可以完全本地运行
-- DeepSeek 模式会把补全请求发送到 DeepSeek API，请按自己的隐私要求选择
-
-你的词库不是平台的人质。它只是一个你随时能打开、备份和带走的 JSON 文件。
-
----
-
-## License
-
-[MIT](https://opensource.org/licenses/MIT) © 2026 [Eric Zhou](https://ericzhou.net/)
-
-## Google Drive 同步
-
-通过页面的 Drive 状态进入“同步与备份”，连接两台私人电脑的同一 Drive 桌面文件夹，或选择 OAuth 隐藏数据区。词汇与逐次复习记录按操作合并，配置和凭据留在本机。详见 [Drive 指南](docs/DRIVE_SYNC.md)。本 PR 不包含自定义单词本或主导航改版。
+本项目采用 [MIT License](LICENSE)，Copyright © 2026 Eric Zhou。

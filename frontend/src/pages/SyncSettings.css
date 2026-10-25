@@ -1,7 +1,6 @@
 /* 同步页使用独立命名空间，避免与模型设置的表单样式互相覆盖。 */
 .sync-page { padding-bottom: 24px; }
 .sync-heading { margin-bottom: 26px; }
-.sync-eyebrow { color: var(--accent-text); font-size: 10px; font-weight: 600; letter-spacing: .18em; }
 .sync-heading h2 { color: var(--heading); font: 600 30px var(--font-display); margin: 6px 0 10px; }
 .sync-heading p, .sync-panel > p, .sync-backup > p { color: var(--text-dim); font-size: 13px; line-height: 1.85; }
 .sync-overview { padding: 24px; border: 1px solid var(--border-light); border-radius: 12px; background: linear-gradient(125deg, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--surface)); }

@@ -1,19 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-
-function shuffle(items) {
-  const result = [...items]
-  for (let index = result.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1))
-    const current = result[index]
-    result[index] = result[swapIndex]
-    result[swapIndex] = current
-  }
-  return result
-}
+import { shuffle } from '../lib/shuffle'
 
 export default function AllWordsReview({ words, notebookNames }) {
   const [order, setOrder] = useState('alpha')
-  const [randomSeed, setRandomSeed] = useState(0)
+  const [randomSeed, setRandomSeed] = useState(() => Math.floor(Math.random() * 0x100000000))
   const [index, setIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
   const [done, setDone] = useState(false)
@@ -22,7 +12,7 @@ export default function AllWordsReview({ words, notebookNames }) {
 
   const deck = useMemo(() => {
     const alphabetic = [...words].sort((a, b) => a.word.localeCompare(b.word, 'en'))
-    return order === 'random' ? shuffle(alphabetic) : alphabetic
+    return order === 'random' ? shuffle(alphabetic, randomSeed) : alphabetic
   }, [order, randomSeed, words])
 
   useEffect(() => {
@@ -65,8 +55,9 @@ export default function AllWordsReview({ words, notebookNames }) {
 
   useEffect(() => {
     function handleKey(event) {
+      if (done || event.defaultPrevented || event.isComposing) return
       const tagName = event.target?.tagName
-      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || event.target?.isContentEditable) return
+      if (['INPUT', 'TEXTAREA', 'SELECT', 'A', 'SUMMARY'].includes(tagName) || event.target?.isContentEditable) return
       if (event.ctrlKey || event.metaKey || event.altKey) return
 
       if ((event.key === ' ' || event.key === 'Enter') && current && !flipped) {
@@ -83,7 +74,7 @@ export default function AllWordsReview({ words, notebookNames }) {
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [current, flipped, goNext, goPrevious])
+  }, [current, done, flipped, goNext, goPrevious])
 
   if (done) {
     return (
@@ -105,10 +96,7 @@ export default function AllWordsReview({ words, notebookNames }) {
     setIndex(0)
     setFlipped(false)
     setDone(false)
-    if (nextOrder === order) {
-      if (nextOrder === 'random') setRandomSeed(seed => seed + 1)
-      return
-    }
+    if (nextOrder === 'random') setRandomSeed(seed => seed + 1)
     setOrder(nextOrder)
   }
 

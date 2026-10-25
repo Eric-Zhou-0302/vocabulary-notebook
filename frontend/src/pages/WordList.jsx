@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { fetchWords, fetchDates, enrichMissing, moveWords, copyWords } from '../api'
 import { useSSE } from '../useSSE'
 import { useNotebooks } from '../useNotebooks'
+import { useTransientMessage } from '../useTransientMessage'
 import WordCard from '../components/WordCard'
 import ExportMenu from '../components/ExportMenu'
 import EnrichProgress from '../components/EnrichProgress'
@@ -95,7 +96,7 @@ export default function WordList({ searchInputRef }) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [enriching, setEnriching] = useState(false)
-  const [toast, setToast] = useState('')
+  const [toast, setToast] = useTransientMessage()
   const [sseDisconnected, setSseDisconnected] = useState(false)
   const [libraryVersion, setLibraryVersion] = useState(0)
 
@@ -146,10 +147,9 @@ export default function WordList({ searchInputRef }) {
       window.dispatchEvent(new Event('review-stats-changed'))
     }
     // 简化 reason 文本(去掉引号和括号内的细节)
-    const cleanReason = reason.replace(/['"()（）]/g, '').slice(0, 60)
-    setToast(`自动补全失败: ${word} — ${cleanReason}`)
-    setTimeout(() => setToast(''), 5000)
-  }, [refreshNotebooks])
+    const cleanReason = String(reason || '请稍后重试').replace(/['"()（）]/g, '').slice(0, 60)
+    setToast(`自动补全失败: ${word} — ${cleanReason}`, 5000)
+  }, [refreshNotebooks, setToast])
 
   useSSE({
     onEnriched: handleEnriched,
@@ -169,8 +169,7 @@ export default function WordList({ searchInputRef }) {
 
   async function handleEnrichMissing() {
     if (!hasMissing) {
-      setToast('当前列表没有需要补全的单词')
-      setTimeout(() => setToast(''), 3000)
+      setToast('当前列表没有需要补全的单词', 3000)
       return
     }
     setEnriching(true)
@@ -178,13 +177,11 @@ export default function WordList({ searchInputRef }) {
     setToast('')
     try {
       const result = await enrichMissing(notebookId)
-      setToast(result.message)
-      setTimeout(() => setToast(''), 4000)
+      setToast(result.message, 4000)
       // 不在这里 setEnriching(false) — 后端可能还要跑很久。
       // 由 EnrichProgress 通过 useEnrichProgress 检测到后端完成时回调
     } catch {
-      setToast('补全请求失败，请确认后端运行中')
-      setTimeout(() => setToast(''), 4000)
+      setToast('补全请求失败，请确认后端运行中', 4000)
       setEnriching(false)  // 请求失败：没东西可补，关掉 bar
     }
   }
@@ -353,11 +350,11 @@ export default function WordList({ searchInputRef }) {
         </div>
       ) : (
         <>
-          {words.map((w, i) => <div className={`word-entry${organizing ? ' is-selectable' : ''}`} key={w.id}>
+          {words.map(w => <div className={`word-entry${organizing ? ' is-selectable' : ''}`} key={w.id}>
             {organizing && <label className="word-check"><input type="checkbox" aria-label={`选择 ${w.word}`} checked={selected.includes(w.id)} disabled={moving}
               onChange={e => setSelected(ids => e.target.checked ? [...ids, w.id] : ids.filter(id => id !== w.id))} /></label>}
             <div className="word-entry-content">
-              <WordCard word={w} q={q} index={i} notebookName={!notebookId ? notebooks.find(book => book.id === w.notebook_id)?.name || '默认单词本' : undefined} />
+              <WordCard word={w} q={q} notebookName={!notebookId ? notebooks.find(book => book.id === w.notebook_id)?.name || '默认单词本' : undefined} />
             </div>
           </div>)}
           {totalPages > 1 && (

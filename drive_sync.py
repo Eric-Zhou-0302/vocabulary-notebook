@@ -3,6 +3,7 @@ import base64
 import hashlib
 import html
 import json
+import os
 import secrets
 import threading
 import time
@@ -281,10 +282,10 @@ class DriveSync:
             if not self.lock.acquire(blocking=False):
                 return {"busy": True}
             self.busy = True
-        pulled = pushed = 0
+        progress = {"pulled": 0, "pushed": 0}
         try:
             if self.folder_settings().get("enabled"):
-                return self._sync_folder()
+                return self._sync_folder(progress)
             with httpx.Client(timeout=30) as http:
                 http.headers["Authorization"] = "Bearer " + self._access_token(http)
                 files, page = [], None
@@ -320,17 +321,18 @@ class DriveSync:
                         raise ValueError("云端词库版本不兼容，请升级应用")
                     operations = document["operations"]
                     with self.write_lock:
-                        pulled += storage.merge(self.data_path(), operations)
+                        progress["pulled"] += storage.merge(self.data_path(), operations)
                         data = storage.read(self.data_path())
                         meta = data["_sync"]
                         meta["downloaded_files"] = sorted(set(meta.get("downloaded_files", [])) | {file["id"]})
                         meta["uploaded"] = sorted(set(meta["uploaded"]) | {op["id"] for op in operations})
-                        if pulled:
+                        if progress["pulled"]:
                             meta["last_pulled_at"] = datetime.now(timezone.utc).isoformat()
                         storage.atomic_write(self.data_path(), data)
                 with self.write_lock:
                     meta = storage.read(self.data_path())["_sync"]
-                    pending = [op for key, op in sorted(meta["operations"].items()) if key not in set(meta["uploaded"])]
+                    uploaded = set(meta["uploaded"])
+                    pending = [op for key, op in sorted(meta["operations"].items()) if key not in uploaded]
                 for start in range(0, len(pending), 50):
                     batch = pending[start:start + 50]
                     storage.validate_operations(batch)
@@ -355,24 +357,24 @@ class DriveSync:
                         meta["uploaded"] = sorted(set(meta["uploaded"]) | {op["id"] for op in batch})
                         meta["downloaded_files"] = sorted(set(meta.get("downloaded_files", [])) | {file_id})
                         storage.atomic_write(self.data_path(), data)
-                    pushed += len(batch)
+                    progress["pushed"] += len(batch)
             with self.write_lock:
                 data = storage.read(self.data_path())
                 data["_sync"]["last_synced_at"] = datetime.now(timezone.utc).isoformat()
-                if pulled:
+                if progress["pulled"]:
                     data["_sync"]["last_pulled_at"] = data["_sync"]["last_synced_at"]
                 storage.atomic_write(self.data_path(), data)
             self.error = ""
-            return {"pulled": pulled, "pushed": pushed}
+            return progress
         except Exception as exc:
             self.error = safe_error(exc)
-            return {"error": self.error, "pulled": pulled, "pushed": pushed}
+            return {"error": self.error, **progress}
         finally:
             with self.auth_lock:
                 self.busy = False
                 self.lock.release()
 
-    def _sync_folder(self):
+    def _sync_folder(self, progress):
         settings = self.folder_settings()
         root = Path(settings["folder_path"])
         if not root.is_dir() or not (root / "library.json").is_file():
@@ -383,7 +385,6 @@ class DriveSync:
         with self.write_lock:
             meta = storage.read(self.data_path())["_sync"]
             seen = set(meta.get("downloaded_files", []))
-        pulled = pushed = 0
         # Files are immutable and named by their content; cloud conflict copies deduplicate by op ID.
         for file in sorted(root.glob("vocabulary-*.json")):
             if file.name in seen:
@@ -394,12 +395,12 @@ class DriveSync:
             if document.get("version") != storage.VERSION:
                 raise ValueError("同步文件版本不兼容，请升级应用")
             with self.write_lock:
-                pulled += storage.merge(self.data_path(), document["operations"])
+                progress["pulled"] += storage.merge(self.data_path(), document["operations"])
                 data = storage.read(self.data_path())
                 meta = data["_sync"]
                 meta["downloaded_files"] = sorted(set(meta.get("downloaded_files", [])) | {file.name})
                 meta["uploaded"] = sorted(set(meta["uploaded"]) | {op["id"] for op in document["operations"]})
-                if pulled:
+                if progress["pulled"]:
                     meta["last_pulled_at"] = datetime.now(timezone.utc).isoformat()
                 storage.atomic_write(self.data_path(), data)
         with self.write_lock:
@@ -421,7 +422,6 @@ class DriveSync:
                 with temp.open("wb") as stream:
                     stream.write(content)
                     stream.flush()
-                    import os
                     os.fsync(stream.fileno())
                 temp.replace(file)
             finally:
@@ -432,10 +432,10 @@ class DriveSync:
                 meta["uploaded"] = sorted(set(meta["uploaded"]) | {op["id"] for op in batch})
                 meta["downloaded_files"] = sorted(set(meta.get("downloaded_files", [])) | {name})
                 storage.atomic_write(self.data_path(), data)
-            pushed += len(batch)
+            progress["pushed"] += len(batch)
         with self.write_lock:
             data = storage.read(self.data_path())
             data["_sync"]["last_synced_at"] = datetime.now(timezone.utc).isoformat()
             storage.atomic_write(self.data_path(), data)
         self.error = ""
-        return {"pulled": pulled, "pushed": pushed}
+        return progress

@@ -158,7 +158,8 @@ def test_review_scope_keeps_daily_new_quota_global(client, monkeypatch):
 
 def test_enrich_missing_only_queues_selected_notebook(client, monkeypatch):
     book = create_book(client)
-    first, second = create_word(client, "bond", book["id"]), create_word(client, "equity")
+    first = create_word(client, "bond", book["id"])
+    create_word(client, "equity")
     data = app.load_words()
     for word in data["words"]:
         word["definition"] = ""

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import NavigationIcon from '../components/NavigationIcon'
 import './SettingsPolish.css'
@@ -20,38 +20,41 @@ export default function ModelSettings() {
   const [error, setError] = useState('')
   const [modelError, setModelError] = useState('')
   const [message, setMessage] = useState('')
-  const generation = useRef(0)
+  const modelRequests = useRef({ controller: null })
 
-  async function refreshModels(apiKey = '') {
-    const id = ++generation.current
+  const refreshModels = useCallback(async (apiKey = '') => {
+    modelRequests.current.controller?.abort()
+    const controller = new AbortController()
+    modelRequests.current.controller = controller
     setLoading(true)
     setModels(null)
     setModelError('')
     try {
-      const data = await request('/deepseek-models', { method: 'POST', body: JSON.stringify({ api_key: apiKey }) })
-      if (id === generation.current) setModels(data.models)
+      const data = await request('/deepseek-models', { method: 'POST', body: JSON.stringify({ api_key: apiKey }), signal: controller.signal })
+      if (!controller.signal.aborted) setModels(data.models)
     } catch (err) {
-      if (id === generation.current) setModelError(err.message)
+      if (!controller.signal.aborted) setModelError(err.message)
     } finally {
-      if (id === generation.current) setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    let active = true
-    request('').then(data => {
-      if (!active) return
+    const controller = new AbortController()
+    const pendingModels = modelRequests.current
+    request('', { signal: controller.signal }).then(data => {
+      if (controller.signal.aborted) return
       setSettings({ ...data, deepseek: { ...data.deepseek, api_key: '' } })
       if (data.deepseek.api_key_configured) refreshModels()
-    }).catch(err => { if (active) setError(err.message) })
-    return () => { active = false; generation.current++ }
-  }, [])
+    }).catch(err => { if (!controller.signal.aborted) setError(err.message) })
+    return () => { controller.abort(); pendingModels.controller?.abort() }
+  }, [refreshModels])
 
   function update(section, key, value) {
     setMessage('')
     setSettings(current => ({ ...current, [section]: { ...current[section], [key]: value } }))
     if (key === 'api_key') {
-      generation.current++
+      modelRequests.current.controller?.abort()
       setLoading(false)
       setModels(null)
       setModelError('密钥已修改，请刷新模型列表。')

@@ -4,19 +4,23 @@ import { createWord, fetchWord } from '../api'
 import { useSSE } from '../useSSE'
 import WordCard from '../components/WordCard'
 import { useNotebooks } from '../useNotebooks'
+import { useTransientMessage } from '../useTransientMessage'
 import NavigationIcon from '../components/NavigationIcon'
 import './NotebookPolish.css'
 
 function useProviderLabel() {
   const [label, setLabel] = useState('模型')
   useEffect(() => {
-    fetch('/api/health')
-      .then(r => r.json())
+    const controller = new AbortController()
+    fetch('/api/health', { signal: controller.signal })
+      .then(r => { if (!r.ok) throw new Error('连接检查失败'); return r.json() })
       .then(d => {
+        if (controller.signal.aborted) return
         const p = d.provider
         setLabel(p === 'ollama' ? 'Ollama' : p === 'deepseek' ? 'DeepSeek' : p || '模型')
       })
       .catch(() => {})
+    return () => controller.abort()
   }, [])
   return label
 }
@@ -28,7 +32,7 @@ export default function WordNew() {
   const selectedBook = notebooks.find(book => book.id === notebookId)
   const [word, setWord] = useState('')
   const [loading, setLoading] = useState(false)
-  const [toast, setToast] = useState(null)
+  const [toast, setToast] = useTransientMessage(null)
   const [addedWords, setAddedWords] = useState([])
   const addedRef = useRef([])
   const inputRef = useRef(null)
@@ -107,19 +111,17 @@ export default function WordNew() {
       const result = await createWord(submitted, '', notebookId)
       showRecent(result)
       clearSubmitted(submitted)
-      setToast({ type: 'info', msg: `「${result.word.word}」已保存到「${selectedBook.name}」` })
-      setTimeout(() => setToast(null), 2000)
+      setToast({ type: 'info', msg: `「${result.word.word}」已保存到「${selectedBook.name}」` }, 2000)
     } catch (err) {
       if (err.status === 409 && err.details?.word?.id) {
         showRecent({ word: err.details.word, enrichment: err.details.enrichment, existing: true })
         clearSubmitted(submitted)
-        setToast({ type: 'info', msg: err.message })
+        setToast({ type: 'info', msg: err.message }, 3000)
       } else if (err.status === 409) {
-        setToast({ type: 'warn', msg: err.message })
+        setToast({ type: 'warn', msg: err.message }, 3000)
       } else {
-        setToast({ type: 'error', msg: err.message })
+        setToast({ type: 'error', msg: err.message }, 3000)
       }
-      setTimeout(() => setToast(null), 3000)
     } finally {
       setLoading(false)
     }
@@ -196,12 +198,12 @@ export default function WordNew() {
         <h3 id="added-words-heading">刚刚添加 · 即时记忆</h3>
         <p className="added-words-hint">本页展示最近添加或再次查看的 10 个单词，在同一本中重复输入会直接显示已有内容。</p>
         <div aria-live="polite" aria-relevant="additions text">
-          {addedWords.map((entry, index) => <article key={entry.word.id}>
+          {addedWords.map(entry => <article key={entry.word.id}>
             <p className="added-words-hint">
               <Link to={`/?notebook_id=${encodeURIComponent(entry.word.notebook_id || 'default')}`}>{notebooks.find(book => book.id === entry.word.notebook_id)?.name || '所属单词本'}</Link>
               {entry.existing && ' · 本中已有，已展示原记录并保留复习进度'}
             </p>
-            {['removed', 'deleted'].includes(entry.enrichment?.status) ? <h4>{entry.word.word}</h4> : <WordCard word={entry.word} index={index} />}
+            {['removed', 'deleted'].includes(entry.enrichment?.status) ? <h4>{entry.word.word}</h4> : <WordCard word={entry.word} />}
             {!entry.word.definition && <p className="added-words-hint">
               {['queued', 'processing'].includes(entry.enrichment?.status) ? '已保存，正在生成释义…'
                 : entry.enrichment?.status === 'deleted' ? '这个单词已被删除。'

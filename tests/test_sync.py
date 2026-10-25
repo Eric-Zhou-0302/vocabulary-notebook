@@ -1,9 +1,7 @@
 """Two independent computers, offline concurrent edits, persistent FSRS and Drive IO."""
 import copy
-import asyncio
 import json
 import threading
-from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -234,9 +232,6 @@ def client(tmp_path, monkeypatch):
     return TestClient(app.app)
 
 
-
-
-
 def test_full_backup_roundtrip_preserves_review_history(client, tmp_path):
     created = client.post("/api/words", json={"word": "bond", "definition": "n. 债券"}).json()["word"]
     client.post(f"/api/words/{created['id']}/review", json={"rating": 4})
@@ -273,15 +268,6 @@ def test_cache_lock_rejects_second_process_and_releases(tmp_path):
     finally:
         held.close()
     instance_lock.acquire(path).close()
-
-
-
-
-
-
-
-
-
 
 
 def test_future_cache_version_never_overwrites_existing_data(tmp_path):
@@ -418,3 +404,85 @@ def test_oauth_callback_completes_or_reports_denial(tmp_path, monkeypatch, denie
     if not denied:
         assert sync.status()['account'] == 'test@example.com'
         assert storage.read(sync.data_path())['_sync']['account'] == 'test.apps.googleusercontent.com:user'
+
+
+def test_atomic_write_failure_preserves_original_and_removes_temporary_file(tmp_path):
+    path = tmp_path / 'words.json'
+    storage.atomic_write(path, {'words': []})
+    original = path.read_bytes()
+
+    with pytest.raises(ValueError):
+        storage.atomic_write(path, {'partial': '不能留下的临时内容', 'invalid': float('nan')})
+
+    assert path.read_bytes() == original
+    assert set(tmp_path.iterdir()) == {path}
+
+
+def test_atomic_writes_use_independent_temporary_files(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    path = tmp_path / 'state.json'
+    barrier = threading.Barrier(2)
+    original_dump = storage.json.dump
+
+    def overlapping_dump(*args, **kwargs):
+        original_dump(*args, **kwargs)
+        barrier.wait(timeout=5)
+
+    monkeypatch.setattr(storage.json, 'dump', overlapping_dump)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        writes = [pool.submit(storage.atomic_write, path, {'writer': i}) for i in range(2)]
+        for write in writes:
+            write.result(timeout=5)
+
+    assert json.loads(path.read_text()) in ({'writer': 0}, {'writer': 1})
+    assert set(tmp_path.iterdir()) == {path}
+
+
+@pytest.mark.parametrize('field', ['first_review_at', 'due_at'])
+def test_remote_invalid_schedule_timestamps_do_not_enter_cache(tmp_path, field):
+    path = tmp_path / 'words.json'
+    storage.commit(path, {'words': [word()]})
+    original = path.read_bytes()
+    state = storage.review_state(None, [{'id': 'first', 'rating': 3, 'at': '2026-10-18T10:00:00Z'}])
+    state[field] = 'not-a-timestamp'
+    operation = {**ops(path)[0], 'id': 'invalid-schedule', 'clock': 100, 'field': 'srs_base', 'value': state}
+
+    with pytest.raises(ValueError):
+        storage.merge(path, [operation])
+
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize('timestamp', ['2026-10-18T10:00:00Z', '2026-10-18T10:00:00+00:00', '2026-10-18T10:00:00'])
+@pytest.mark.parametrize('with_optional_dates', [False, True])
+def test_remote_schedule_keeps_legacy_timestamp_compatibility(tmp_path, timestamp, with_optional_dates):
+    path = tmp_path / 'words.json'
+    storage.commit(path, {'words': [word()]})
+    state = {'d': 5.0, 's': 2.0, 'last_review_at': timestamp}
+    if with_optional_dates:
+        state.update(first_review_at=timestamp, due_at=timestamp)
+    operation = {**ops(path)[0], 'id': 'legacy-schedule', 'clock': 100, 'field': 'srs_base', 'value': state}
+
+    assert storage.merge(path, [operation]) == 1
+    assert storage.read(path)['words'][0]['srs'] == state
+
+
+def test_folder_failure_reports_changes_already_merged(tmp_path):
+    path, source = tmp_path / 'local.json', tmp_path / 'remote.json'
+    sync = engine(path, tmp_path / 'secrets')
+    folder = tmp_path / 'drive'
+    sync.configure_folder(str(folder))
+    storage.commit(source, {'words': [word()]})
+    remote_operations = ops(source)
+    storage.atomic_write(folder / 'vocabulary-a.json', {'version': storage.VERSION, 'operations': remote_operations})
+    storage.atomic_write(folder / 'vocabulary-z.json', {'version': 999, 'operations': []})
+
+    result = sync.sync()
+
+    assert result['error']
+    assert result['pulled'] == len(remote_operations)
+    assert result['pushed'] == 0
+    assert storage.read(path)['words'] == storage.read(source)['words']
+    assert sync.status()['last_pulled_at']
+    assert not sync.status()['syncing']

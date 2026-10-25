@@ -4,6 +4,7 @@ import { fetchReviewDue, fetchReviewStats, fetchWords, rateWord } from '../api'
 import AllWordsReview from '../components/AllWordsReview'
 import SpacedReview from '../components/SpacedReview'
 import { useNotebooks } from '../useNotebooks'
+import { useTransientMessage } from '../useTransientMessage'
 import '../components/ReviewPolish.css'
 
 export default function Review() {
@@ -64,7 +65,7 @@ function ReviewSession({ notebookId, notebooks, mode }) {
   const [allTotal, setAllTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [toast, setToast] = useState('')
+  const [toast, setToast] = useTransientMessage()
   const requestId = useRef(0)
   const notebookNames = notebookId ? undefined : Object.fromEntries(notebooks.map(book => [book.id, book.name]))
 
@@ -119,12 +120,11 @@ function ReviewSession({ notebookId, notebooks, mode }) {
       return result
     } catch (requestError) {
       if (current === requestId.current) {
-        setToast(requestError.message || '评分保存失败，请重试')
-        window.setTimeout(() => { if (current === requestId.current) setToast('') }, 4000)
+        setToast(requestError.message || '评分保存失败，请重试', 4000)
       }
       throw requestError
     }
-  }, [notebookId])
+  }, [notebookId, setToast])
 
   return (
     <div>

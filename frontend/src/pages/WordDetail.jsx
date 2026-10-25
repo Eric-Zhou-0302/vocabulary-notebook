@@ -32,10 +32,12 @@ export default function WordDetail() {
         if (!active || current !== request) return
         setWord(data.word)
         if (fromCloud) setSyncNotice('云端内容已更新，当前未保存的编辑已保留。保存会提交编辑框中的内容。')
-      } catch {
+      } catch (requestError) {
         if (!active || current !== request) return
-        if (fromCloud) setSyncNotice('无法刷新此单词，它可能已在另一台电脑删除。当前编辑仍已保留，请先复制需要的内容。')
-        else setError('单词不存在')
+        if (fromCloud) setSyncNotice(requestError.status === 404
+          ? '此单词已不存在，可能已在另一台电脑删除。当前编辑仍已保留，请先复制需要的内容。'
+          : '暂时无法刷新此单词。当前编辑仍已保留，请检查连接后重试。')
+        else setError(requestError.status === 404 ? '单词不存在' : requestError.message || '加载失败，请检查连接后重试')
       } finally {
         if (active && current === request) setLoading(false)
       }

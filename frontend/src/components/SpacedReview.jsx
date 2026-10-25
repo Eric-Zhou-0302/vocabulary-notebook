@@ -59,8 +59,9 @@ export default function SpacedReview({ cards, onRate, onReload, notebookNames })
 
   useEffect(() => {
     function handleKey(event) {
+      if (done || event.defaultPrevented || event.isComposing) return
       const tagName = event.target?.tagName
-      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'BUTTON' || tagName === 'SELECT' || event.target?.isContentEditable) return
+      if (['INPUT', 'TEXTAREA', 'BUTTON', 'SELECT', 'A', 'SUMMARY'].includes(tagName) || event.target?.isContentEditable) return
       if (event.ctrlKey || event.metaKey || event.altKey) return
 
       if ((event.key === ' ' || event.key === 'Enter') && current && !flipped) {
@@ -73,7 +74,7 @@ export default function SpacedReview({ cards, onRate, onReload, notebookNames })
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [current, flipped, handleRate])
+  }, [current, done, flipped, handleRate])
 
   if (done) {
     return (

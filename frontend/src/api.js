@@ -1,3 +1,5 @@
+import { wordApiPath } from './lib/wordPaths.js'
+
 const BASE = '/api'
 
 async function request(url, options = {}) {
@@ -27,7 +29,7 @@ export async function fetchDates(notebook_id = '') {
 }
 
 export async function fetchWord(id) {
-  const res = await request(`/words/${id}`)
+  const res = await request(wordApiPath(id))
   return res.json()
 }
 
@@ -42,7 +44,7 @@ export async function createWord(word, definition = '', notebook_id = 'default')
 }
 
 export async function updateWord(id, data) {
-  const res = await request(`/words/${id}`, {
+  const res = await request(wordApiPath(id), {
     method: 'PUT',
     body: JSON.stringify(data),
   })
@@ -52,7 +54,7 @@ export async function updateWord(id, data) {
 }
 
 export async function deleteWord(id) {
-  await request(`/words/${id}`, { method: 'DELETE' })
+  await request(wordApiPath(id), { method: 'DELETE' })
   notifyLibraryChanged()
 }
 
@@ -66,8 +68,8 @@ export async function enrichMissing(notebook_id = '') {
   return res.json()
 }
 
-export async function fetchReviewStats(notebook_id = '') {
-  const res = await request(`/review/stats?${new URLSearchParams({ notebook_id })}`)
+export async function fetchReviewStats(notebook_id = '', options = {}) {
+  const res = await request(`/review/stats?${new URLSearchParams({ notebook_id })}`, options)
   return res.json()
 }
 
@@ -78,7 +80,7 @@ export async function fetchReviewDue(limit = 20, notebook_id = '') {
 }
 
 export async function rateWord(wordId, rating) {
-  const res = await request(`/words/${wordId}/review`, {
+  const res = await request(`${wordApiPath(wordId)}/review`, {
     method: 'POST',
     body: JSON.stringify({ rating }),
   })

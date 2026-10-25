@@ -1,5 +1,4 @@
 """Regressions reported during upstream review; all storage and AI are isolated."""
-import asyncio
 import threading
 from datetime import timedelta
 import pytest
