@@ -47,6 +47,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run check
+      - name: Check desktop process and URL policies
+        run: node --test ../desktop/test/*.test.cjs
       - name: Check committed build artifacts
         run: |
           if [ -n "$(git status --porcelain -- dist)" ]; then

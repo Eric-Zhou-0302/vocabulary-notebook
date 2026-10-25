@@ -3,6 +3,7 @@ import asyncio
 import csv
 import io
 import ipaddress
+import hmac
 import math
 import json
 import logging
@@ -113,9 +114,16 @@ app = FastAPI(title="Vocabulary Notebook", version="1.2.0", lifespan=lifespan)
 
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
 
+_DESKTOP_TOKEN = os.environ.get("VOCAB_DESKTOP_TOKEN", "")
+_DESKTOP_ORIGIN = os.environ.get("VOCAB_DESKTOP_ORIGIN", "")
+_ALLOWED_ORIGINS = (
+    "http://localhost:1400", "http://127.0.0.1:1400",
+    "http://localhost:5173", "http://127.0.0.1:5173",
+) + ((_DESKTOP_ORIGIN,) if _DESKTOP_ORIGIN else ())
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:1400", "http://127.0.0.1:1400", "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -130,19 +138,30 @@ async def local_origin_guard(request: Request, call_next):
         local_peer = False
     if not local_peer:
         return JSONResponse({"detail": "仅允许本机访问词汇本"}, status_code=403)
-    origin = request.headers.get("origin")
-    if request.method not in ("GET", "HEAD", "OPTIONS") and origin and origin not in (
-        "http://localhost:1400", "http://127.0.0.1:1400", "http://localhost:5173", "http://127.0.0.1:5173"
+    # 桌面窗口通过主进程注入令牌，其他本机网页也不能读取词库或静态内容。
+    if _DESKTOP_TOKEN and not hmac.compare_digest(
+        request.headers.get("x-vocab-desktop-token", "").encode("utf-8"),
+        _DESKTOP_TOKEN.encode("utf-8"),
     ):
+        return JSONResponse({"detail": "桌面会话验证失败"}, status_code=403)
+    origin = request.headers.get("origin")
+    if request.method not in ("GET", "HEAD", "OPTIONS") and origin and origin not in _ALLOWED_ORIGINS:
         return JSONResponse({"detail": "仅允许本地词汇本页面修改数据"}, status_code=403)
     return await call_next(request)
+
+
+@app.get("/api/desktop/health")
+async def desktop_health():
+    if not _DESKTOP_TOKEN:
+        raise HTTPException(status_code=404, detail="桌面会话未启动")
+    return {"status": "ok"}
 
 # ─── Config ───────────────────────────────────────────────
 
 # 测试/临时验收可通过环境变量隔离数据；正常启动仍使用项目内 words.json。
 DATA_FILE = Path(os.environ.get("VOCAB_DATA_FILE", "words.json"))
 CHINA_TZ = timezone(timedelta(hours=8))
-STATIC_DIR = Path("frontend/dist")
+STATIC_DIR = Path(os.environ.get("VOCAB_DESKTOP_STATIC_DIR", "frontend/dist"))
 
 # SSE 事件总线 — 后台 enrichment 完成后通知前端
 # 必须在 startup 事件中初始化，否则 asyncio.Queue() 会绑定到错误的 event loop（Python 3.9）

@@ -16,7 +16,15 @@
 - **同步与备份**：可选 Google Drive 桌面文件夹或 API 直连；支持完整学习历史备份和合并导入。
 - **界面与操作**：深浅色主题、手机布局、桌面可收起侧栏，以及搜索、翻卡和评分快捷键。
 
-应用用于个人电脑本地运行。后端只监听 `127.0.0.1:1400`，不提供公网部署或多用户登录功能。跨电脑学习使用同步功能，详见 [Drive 同步指南](docs/DRIVE_SYNC.md)。
+应用用于个人电脑本地运行。网页模式的后端只监听 `127.0.0.1:1400`；Electron 桌面模式使用自动分配的本机端口。不提供公网部署或多用户登录功能。跨电脑学习使用同步功能，详见 [Drive 同步指南](docs/DRIVE_SYNC.md)。
+
+## macOS / Windows 桌面版
+
+项目提供 Electron 桌面入口和安装包构建流程，使用同一套 React 界面与 Python 后端。安装包内置 Python 运行环境，使用者无需另装 Python 或 Node.js；AI 补全仍需自行配置 Ollama 或 DeepSeek。
+
+桌面版使用独立数据目录，首次启动不会读取或搬迁网页版本的词库、配置和凭据。迁移时请通过「同步与备份」下载、导入完整学习历史备份。开发启动、各平台构建、数据位置及回退方式见 [桌面版指南](docs/DESKTOP.md)。
+
+当前构建流程用于开发验证，尚未配置 Apple 公证与 Windows 代码签名；各平台的安装与功能验收需分别完成。
 
 ## 界面预览
 
@@ -189,11 +197,13 @@ sync_storage.py           操作历史、合并与本地原子写入
 drive_sync.py             Drive 文件夹 / OAuth 同步
 instance_lock.py          同一词库的进程锁
 event_broadcast.py        SSE 多订阅者事件广播
+desktop_backend.py        桌面后端启动、独立数据目录、进程生命周期
+desktop/                  Electron 入口、平台打包与桌面测试
 frontend/src/             React 页面、组件、Hooks 与样式
 frontend/test/            Node 原生前端逻辑测试
 frontend/dist/            FastAPI 直接托管的构建文件
 tests/                    后端回归测试与隔离客户端
-docs/                     Drive 同步与备份指南
+docs/                     Drive 同步、桌面开发与打包指南
 .github/                  CI、Issue / PR 模板
 ```
 

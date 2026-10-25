@@ -27,6 +27,7 @@ make check
 npm --prefix frontend run lint
 npm --prefix frontend test
 npm --prefix frontend run build
+node --test desktop/test/*.test.cjs
 ```
 
 使用已激活的项目环境时，可用 `make check PYTHON=python`。静态检查约束未定义名称、无用导入和 Hooks 使用，不以批量格式化代替问题修复。
@@ -51,6 +52,14 @@ npm --prefix frontend run build
 
 修改 Hook 时检查请求取消、迟到响应、轮询重叠、定时器和监听器清理。改动布局或交互时，还需要浏览器检查：窄屏/桌面、深浅色、键盘焦点与减少动态效果。新增视觉行为的截图可放进 PR，无需提交临时截图到仓库。
 
+### 桌面版开发与检查
+
+Electron 入口、Python 后端打包和安装包构建见 [桌面版指南](docs/DESKTOP.md)。桌面依赖单独位于 `desktop/package.json` 与 `requirements-desktop.txt`，使用项目内的 `.venv-desktop`，不要求修改网页开发环境。
+
+修改桌面代码后，除相关后端回归测试外，运行 `npm --prefix desktop test`；打包前运行前端构建。安装包必须在目标操作系统和架构上构建、启动与退出验证，不能将 macOS 检查结果视为 Windows 验收。自动验证使用临时 `VOCAB_DESKTOP_USER_DATA_DIR`，不得指向日常桌面数据或仓库真实词库。
+
+`desktop-build.yml` 通过手动触发生成各平台构建产物，不自动创建 Release 或发布安装包。增加签名、更新分发或迁移行为时，应单独说明其对本机数据和发布流程的影响。
+
 ## 代码结构与边界
 
 | 模块 | 维护重点 |
@@ -61,6 +70,8 @@ npm --prefix frontend run build
 | `drive_sync.py` | 同步重试、OAuth 生命周期、部分成功的进度报告 |
 | `fsrs.py` | 复习调度与历史重放一致性；更改算法需独立评估 |
 | `pdf_export.py` | 排版、分页、字体字形完整性与错误提示 |
+| `desktop_backend.py` | 桌面独立数据目录、启动握手、父进程退出后的服务清理 |
+| `desktop/` | Electron 进程管理、窗口隔离、导航与下载、平台打包 |
 | `frontend/src/lib/` | 无 React 生命周期依赖、可用 Node 测试的纯逻辑 |
 | `frontend/src/use*.js` | 请求、事件、轮询与页面状态生命周期 |
 
