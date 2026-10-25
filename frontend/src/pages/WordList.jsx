@@ -32,7 +32,9 @@ export default function WordList({ searchInputRef }) {
   const [sort, setSort] = useState(() => {
     try {
       const saved = localStorage.getItem('vocabulary-word-sort')
-      return ['', 'created_desc', 'created_asc', 'alpha_asc', 'alpha_desc'].includes(saved) ? saved : 'created_desc'
+      // 旧版默认顺序按添加时间升序展示，迁移时保留这一偏好。
+      if (saved === '') return 'created_asc'
+      return ['created_desc', 'created_asc', 'alpha_asc', 'alpha_desc'].includes(saved) ? saved : 'created_desc'
     } catch { return 'created_desc' }
   })
   useEffect(() => {
@@ -246,7 +248,6 @@ export default function WordList({ searchInputRef }) {
         >
           <option value="created_desc">添加时间：最新在前</option>
           <option value="created_asc">添加时间：最早在前</option>
-          <option value="">默认顺序</option>
           <option value="alpha_asc">首字母 A→Z</option>
           <option value="alpha_desc">首字母 Z→A</option>
         </select>
