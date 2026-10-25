@@ -6,6 +6,7 @@ import { useNotebooks } from '../useNotebooks'
 import WordCard from '../components/WordCard'
 import ExportMenu from '../components/ExportMenu'
 import EnrichProgress from '../components/EnrichProgress'
+import NavigationIcon from '../components/NavigationIcon'
 
 export default function WordList({ searchInputRef }) {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -157,6 +158,14 @@ export default function WordList({ searchInputRef }) {
   })
 
   const hasMissing = !loading && words.some(w => !w.definition)
+  const hasFilters = Boolean(q || date || letter)
+
+  function clearFilters() {
+    setQ('')
+    setDate('')
+    setLetter('')
+    setPage(1)
+  }
 
   async function handleEnrichMissing() {
     if (!hasMissing) {
@@ -186,7 +195,7 @@ export default function WordList({ searchInputRef }) {
   }, [])
 
   return (
-    <div>
+    <div className="word-list-page">
       {toast && <div className="toast toast-info" role="status">{toast}</div>}
       {sseDisconnected && (
         <div className="toast toast-warn">
@@ -196,7 +205,7 @@ export default function WordList({ searchInputRef }) {
       <section className="notebook-scope" aria-label="单词本范围">
         <div className="notebook-scope-title">
           <h2>{currentBook?.name || (notebookId ? '单词本' : '全部单词')}</h2>
-          <p>{loading ? '正在读取…' : `${total} 个单词${q || date || letter ? '符合筛选' : ''}`}{currentBook?.description ? ` · ${currentBook.description}` : ''}</p>
+          <p>{currentBook?.description || '收录每一次遇见，让词汇成为积累。'}</p>
         </div>
         <div className="notebook-actions">
           <select aria-label="选择单词本" value={notebookId} onChange={e => changeNotebook(e.target.value)} disabled={moving}>
@@ -209,16 +218,24 @@ export default function WordList({ searchInputRef }) {
         </div>
         {notebookError && <p className="notebook-error" role="alert">{notebookError} <button className="btn btn-ghost" onClick={refreshNotebooks}>重试</button></p>}
       </section>
-      <div className="toolbar">
+      <section className="library-tools" aria-label="查找单词">
+      <div className="library-search">
+        <NavigationIcon name="search" />
         <input
           ref={searchInputRef}
           type="text"
           aria-label="搜索单词或释义"
           placeholder="搜索单词或释义…"
+          autoComplete="off"
+          spellCheck={false}
           value={q}
           onChange={e => { setQ(e.target.value); setPage(1) }}
         />
-        <select value={date} onChange={e => { setDate(e.target.value); setPage(1) }}>
+        {q ? <button type="button" className="search-clear" aria-label="清除搜索" onClick={() => { setQ(''); setPage(1); searchInputRef.current?.focus() }}><NavigationIcon name="close" /></button> : <kbd aria-hidden="true">/</kbd>}
+      </div>
+      <div className="toolbar">
+        <div className="library-filters">
+        <select aria-label="添加日期" value={date} onChange={e => { setDate(e.target.value); setPage(1) }}>
           <option value="">全部日期</option>
           {dates.map(d => (
             <option key={d} value={d}>{d}</option>
@@ -236,6 +253,8 @@ export default function WordList({ searchInputRef }) {
           <option value="alpha_asc">首字母 A→Z</option>
           <option value="alpha_desc">首字母 Z→A</option>
         </select>
+        </div>
+        <div className="library-actions">
         <button
           className="btn btn-secondary"
           onClick={handleEnrichMissing}
@@ -245,10 +264,12 @@ export default function WordList({ searchInputRef }) {
           {enriching ? '补全中…' : '补全缺失'}
         </button>
         <ExportMenu q={q} date={date} sort={sort} letter={letter} notebook_id={notebookId} />
-        <Link to={addUrl} className="btn btn-primary">+ 添加</Link>
+        </div>
       </div>
+      </section>
 
       <nav className="alphabet-nav" aria-label="按首字母筛选">
+        <button type="button" className={`alpha alpha-all${!letter ? ' active' : ''}`} aria-pressed={!letter} onClick={() => { setLetter(''); setPage(1) }}>全部</button>
         {Array.from('abcdefghijklmnopqrstuvwxyz').map(l => {
           const has = availableLetters.includes(l)
           const active = letter === l
@@ -258,6 +279,7 @@ export default function WordList({ searchInputRef }) {
               key={l}
               type="button"
               className={`alpha ${stateClass}`}
+              aria-pressed={active}
               onClick={() => (active || has) && toggleLetter(l)}
               disabled={!active && !has}
               title={
@@ -266,16 +288,26 @@ export default function WordList({ searchInputRef }) {
                   : `无 ${l.toUpperCase()} 开头的单词`
               }
             >
-              {l}
+              {l.toUpperCase()}
             </button>
           )
         })}
       </nav>
 
+      {hasFilters && <div className="active-filters" aria-label="当前筛选">
+        <span>筛选</span>
+        {q && <button onClick={() => { setQ(''); setPage(1) }} aria-label={`清除搜索 ${q}`}>“{q}” <NavigationIcon name="close" /></button>}
+        {date && <button onClick={() => { setDate(''); setPage(1) }} aria-label={`清除日期 ${date}`}>{date}<NavigationIcon name="close" /></button>}
+        {letter && <button onClick={() => { setLetter(''); setPage(1) }} aria-label={`清除首字母 ${letter.toUpperCase()}`}>首字母 {letter.toUpperCase()}<NavigationIcon name="close" /></button>}
+        <button className="clear-filters" onClick={clearFilters}>清除全部</button>
+      </div>}
+
       <EnrichProgress active={enriching} onComplete={handleEnrichComplete} />
 
       <div className="word-organize-toggle">
-        <button className="btn btn-ghost" disabled={moving} onClick={() => { setOrganizing(v => !v); setSelected([]) }}>
+        <p className="list-summary" role="status">{loading ? '正在读取词库…' : error ? '词库加载失败' : <><strong>{total.toLocaleString()}</strong> 个单词{hasFilters && '符合筛选'}<span>{totalPages > 1 && `第 ${page} / ${totalPages} 页`}</span></>}</p>
+        <button className="btn btn-ghost" disabled={moving} aria-expanded={organizing} onClick={() => { setOrganizing(v => !v); setSelected([]) }}>
+          <NavigationIcon name="organize" />
           {organizing ? '完成整理' : '整理单词'}
         </button>
       </div>
@@ -295,16 +327,16 @@ export default function WordList({ searchInputRef }) {
         <p>加入会保留原词，在目标本从新词开始；移动会带上原有复习进度。目标本已有的词不会被覆盖。</p>
       </section>}
 
-      {error && <div className="empty-state"><p>{error}</p></div>}
+      {error && <div className="empty-state" role="alert"><p>{error}</p><button className="btn btn-secondary" onClick={() => setLibraryVersion(v => v + 1)}>重新加载</button></div>}
       {error ? null : loading ? (
-        <div className="loading">加载中…</div>
+        <div className="word-skeletons" aria-label="正在加载单词" aria-busy="true">{[0, 1, 2].map(i => <div className="word-skeleton" key={i} aria-hidden="true"><span /><span /><span /></div>)}</div>
       ) : words.length === 0 ? (
         <div className="empty-state">
           <svg className="empty-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="8" y="6" width="28" height="36" rx="3" stroke="currentColor" strokeWidth="1.5"/>
-            <path d="M1314h18M13 20h18M13 26h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M13 14h18M13 20h18M13 26h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             <circle cx="36" cy="36" r="9" stroke="currentColor" strokeWidth="1.5"/>
-            <path d="M3336h6M36 33v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M33 36h6M36 33v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
           <p>
             {q || date || letter
@@ -312,7 +344,7 @@ export default function WordList({ searchInputRef }) {
               : '还没有单词'}
           </p>
           {q || date || letter ? (
-            <button className="btn btn-ghost" onClick={() => { setQ(''); setDate(''); setLetter('') }}>
+            <button className="btn btn-ghost" onClick={clearFilters}>
               清除筛选
             </button>
           ) : (
@@ -325,8 +357,7 @@ export default function WordList({ searchInputRef }) {
             {organizing && <label className="word-check"><input type="checkbox" aria-label={`选择 ${w.word}`} checked={selected.includes(w.id)} disabled={moving}
               onChange={e => setSelected(ids => e.target.checked ? [...ids, w.id] : ids.filter(id => id !== w.id))} /></label>}
             <div className="word-entry-content">
-              {!notebookId && <p className="word-book-name">{notebooks.find(book => book.id === w.notebook_id)?.name || '默认单词本'}</p>}
-              <WordCard word={w} q={q} index={i} />
+              <WordCard word={w} q={q} index={i} notebookName={!notebookId ? notebooks.find(book => book.id === w.notebook_id)?.name || '默认单词本' : undefined} />
             </div>
           </div>)}
           {totalPages > 1 && (

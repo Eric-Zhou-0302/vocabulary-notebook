@@ -1,7 +1,7 @@
 /* 同步页使用独立命名空间，避免与模型设置的表单样式互相覆盖。 */
 .sync-page { padding-bottom: 24px; }
 .sync-heading { margin-bottom: 26px; }
-.sync-eyebrow { color: var(--accent); font-size: 10px; font-weight: 600; letter-spacing: .18em; }
+.sync-eyebrow { color: var(--accent-text); font-size: 10px; font-weight: 600; letter-spacing: .18em; }
 .sync-heading h2 { color: var(--heading); font: 600 30px var(--font-display); margin: 6px 0 10px; }
 .sync-heading p, .sync-panel > p, .sync-backup > p { color: var(--text-dim); font-size: 13px; line-height: 1.85; }
 .sync-overview { padding: 24px; border: 1px solid var(--border-light); border-radius: 12px; background: linear-gradient(125deg, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--surface)); }
@@ -32,7 +32,7 @@
 .sync-method.is-selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); box-shadow: inset 0 0 0 1px var(--accent); }
 .sync-method-top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .sync-method strong { font-size: 14px; font-weight: 600; color: var(--heading); }
-.sync-tag { font-size: 10px; color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); padding: 1px 6px; border-radius: 4px; }
+.sync-tag { font-size: 10px; color: var(--accent-text); background: color-mix(in srgb, var(--accent) 10%, transparent); padding: 1px 6px; border-radius: 4px; }
 .sync-panel { padding: 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); min-width: 0; }
 .sync-panel h4 { font-size: 15px; font-weight: 600; color: var(--heading); margin-bottom: 10px; }
 .sync-panel form { margin-top: 20px; }
@@ -45,9 +45,9 @@
 .sync-guide summary { color: var(--text); cursor: pointer; padding: 6px 0; }
 .sync-guide ol { padding-left: 20px; margin: 10px 0 0; }
 .sync-guide li { padding: 3px 0; }
-.sync-guide a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.sync-guide a { color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; }
 .sync-client-row { display: flex; align-items: center; gap: 14px; border-top: 1px solid var(--border); padding-top: 20px; margin-top: 20px; }
-.sync-step { width: 26px; height: 26px; flex: 0 0 26px; display: grid; place-items: center; border: 1px solid var(--border-light); border-radius: 50%; font-size: 11px; color: var(--accent); }
+.sync-step { width: 26px; height: 26px; flex: 0 0 26px; display: grid; place-items: center; border: 1px solid var(--border-light); border-radius: 50%; font-size: 11px; color: var(--accent-text); }
 .sync-client-row > div { flex: 1; min-width: 0; }
 .sync-client-row strong { color: var(--heading); font-size: 13px; font-weight: 500; }
 .sync-client-row p { color: var(--text-dim); font-size: 11px; margin-top: 4px; }
@@ -58,7 +58,7 @@
 .sync-alert, .sync-feedback.is-error { color: var(--error); background: color-mix(in srgb, var(--error) 8%, var(--surface)); }
 .sync-alert { margin-top: 16px; }
 .sync-feedback { margin-top: 16px; color: var(--success); background: color-mix(in srgb, var(--success) 8%, var(--surface)); }
-.sync-panel > .sync-notice { color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); margin-bottom: 20px; }
+.sync-panel > .sync-notice { color: var(--accent-text); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); margin-bottom: 20px; }
 .sync-overview.is-error { border-color: var(--error); }
 @media (max-width: 600px) {
   .sync-heading h2 { font-size: 26px; }

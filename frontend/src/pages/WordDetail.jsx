@@ -116,25 +116,30 @@ export default function WordDetail() {
   )
 
   return (
-    <div>
-      <button onClick={() => navigate(-1)} className="btn btn-ghost" style={{ marginBottom: 16 }}>← 返回</button>
+    <div className="word-detail-page">
+      <button onClick={() => navigate(-1)} className="btn btn-ghost detail-back">← 返回</button>
 
       {syncNotice && <p role="status">{syncNotice}</p>}
       {actionError && <p role="alert">{actionError}</p>}
       <div className="detail-card">
-        <div className="detail-word">{word.word}</div>
-        {word.phonetic && <div className="detail-phonetic">{word.phonetic}</div>}
-        <div className="detail-definition">{word.definition}</div>
-        {word.example && <div className="detail-example">"{word.example}"</div>}
-        <div className="detail-date">添加于 {word.created_at.slice(0, 10)}</div>
         <p className="detail-notebook">
-          单词本：<Link to={`/?notebook_id=${encodeURIComponent(word.notebook_id || 'default')}`}>{notebooks.find(book => book.id === (word.notebook_id || 'default'))?.name || '查看所属单词本'} →</Link>
+          <Link to={`/?notebook_id=${encodeURIComponent(word.notebook_id || 'default')}`}>{notebooks.find(book => book.id === (word.notebook_id || 'default'))?.name || '查看所属单词本'} <span aria-hidden="true">↗</span></Link>
         </p>
+        <h2 className="detail-word">{word.word}</h2>
+        {word.phonetic && <div className="detail-phonetic">{word.phonetic}</div>}
+        <section className="detail-section" aria-label="释义">
+          <h3>释义</h3>
+          <div className="detail-definition">{word.definition || '释义待补全'}</div>
+        </section>
+        {word.example && <section className="detail-section" aria-label="例句"><h3>例句</h3><p className="detail-example">{word.example}</p></section>}
 
+        <footer className="detail-footer">
+        <div className="detail-date">添加于 {word.created_at.slice(0, 10)}</div>
         <div className="btn-group">
           <button ref={editButtonRef} className="btn btn-primary" onClick={startEdit} disabled={deleting}>编辑</button>
           <button className="btn btn-danger" onClick={handleDelete} disabled={deleting}>{deleting ? '删除中…' : '删除'}</button>
         </div>
+        </footer>
       </div>
 
       {editing && (

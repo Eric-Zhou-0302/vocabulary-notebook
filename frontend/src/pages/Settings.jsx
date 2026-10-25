@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { libraryRequest } from '../api'
+import NavigationIcon from '../components/NavigationIcon'
 import './SyncSettings.css'
+import './SettingsPolish.css'
 
 function FileButton({ label, disabled, onFile }) {
   const input = useRef(null)
@@ -78,14 +81,17 @@ export default function Settings() {
 
   return <div className="sync-page">
     <header className="sync-heading">
-      <span className="sync-eyebrow">GOOGLE DRIVE</span>
       <h2>同步与备份</h2>
       <p>在不同电脑间接续学习，让词汇与复习记录保持一致。</p>
     </header>
+    <nav className="settings-page-nav" aria-label="设置页面">
+      <Link to="/settings"><NavigationIcon name="model" />模型设置</Link>
+      <Link to="/sync-settings" aria-current="page"><NavigationIcon name="cloud" />同步与备份</Link>
+    </nav>
 
     <section className={`sync-overview ${problem ? 'is-error' : ''}`} aria-label="当前同步状态">
       <div className="sync-overview-top">
-        <div><span className="sync-kicker">当前状态</span><h3 aria-live="polite">{stateText}</h3></div>
+        <div className="sync-state-heading"><span className="sync-state-icon"><NavigationIcon name="cloud" /></span><div><span className="sync-kicker">当前状态</span><h3 aria-live="polite">{stateText}</h3></div></div>
         {status?.connected && <button className="btn btn-primary" disabled={locked} onClick={() => act('sync', syncNow)}>{busy === 'sync' || status.syncing ? '同步中…' : '立即同步'}</button>}
       </div>
       {status?.connected ? <>
@@ -134,8 +140,8 @@ export default function Settings() {
             return '同步文件夹已连接。请在 Drive 桌面版确认上传已完成。'
           }) }}>
             <label htmlFor="sync-folder-path">本机文件夹路径</label>
-            <input type="text" id="sync-folder-path" value={folderPath} disabled={locked || activeOther} onChange={event => setFolderPath(event.target.value)} placeholder={status?.folder_path || '粘贴 Google Drive 专用文件夹的完整路径'} autoComplete="off" spellCheck={false} />
-            <p className="sync-field-help">支持 macOS 和 Windows 路径。请选择专用文件夹，不要选择程序或词库所在目录。</p>
+            <input type="text" id="sync-folder-path" aria-describedby="sync-folder-help" value={folderPath} disabled={locked || activeOther} onChange={event => setFolderPath(event.target.value)} placeholder={status?.folder_path || '粘贴 Google Drive 专用文件夹的完整路径'} autoComplete="off" spellCheck={false} />
+            <p id="sync-folder-help" className="sync-field-help">支持 macOS 和 Windows 路径。请选择专用文件夹，不要选择程序或词库所在目录。</p>
             <button className="btn btn-primary" disabled={locked || activeOther || !(folderPath.trim() || status?.folder_path)}>{busy === 'folder' ? '正在连接…' : status?.folder_enabled ? '更新文件夹' : '连接文件夹'}</button>
           </form>
           <details className="sync-guide"><summary>第一次使用？查看连接步骤</summary><ol>

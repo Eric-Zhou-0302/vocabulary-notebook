@@ -5,7 +5,7 @@ import CloudStatus from './CloudStatus'
 import ThemeToggle from './ThemeToggle'
 import NavigationIcon from './NavigationIcon'
 
-export default function AppHeader({ dueCount, onOpenHelp }) {
+export default function AppHeader({ dueCount, onOpenHelp, sidebarCollapsed, onToggleSidebar }) {
   const location = useLocation()
   const detailsRef = useRef(null)
   const summaryRef = useRef(null)
@@ -58,12 +58,15 @@ export default function AppHeader({ dueCount, onOpenHelp }) {
       onOpenHelp()
     }
   }}>
+    <button type="button" className="sidebar-toggle" aria-label={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'} title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'} aria-expanded={!sidebarCollapsed} aria-controls="learning-navigation" onClick={onToggleSidebar}>
+      <NavigationIcon name={sidebarCollapsed ? 'expand' : 'collapse'} />
+    </button>
     <div className="header-topline">
-      <h1 className="app-title"><Link to="/">词汇笔记本</Link></h1>
+      <h1 className="app-title"><Link to="/" aria-label="词汇笔记本"><span className="brand-mark"><NavigationIcon name="words" /></span><span>词汇笔记本<span className="brand-caption">VOCABULARY NOTEBOOK</span></span></Link></h1>
       <details className={`header-tools${isSettings ? ' is-current' : ''}`} ref={detailsRef}
         onToggle={event => setOpen(event.currentTarget.open)}>
         <summary className="header-tools-trigger" ref={summaryRef} aria-expanded={open} aria-controls="header-tools-panel"
-          aria-label={`设置与工具${hasProblem ? `，${problemLabel}` : ''}`}>
+          aria-label={`设置与工具${hasProblem ? `，${problemLabel}` : ''}`} title={sidebarCollapsed ? '设置与工具' : undefined}>
           <NavigationIcon name="settings" />
           <span>设置与工具</span>
           {hasProblem && <span className="header-attention" aria-hidden="true" />}
@@ -86,17 +89,19 @@ export default function AppHeader({ dueCount, onOpenHelp }) {
         </div>
       </details>
     </div>
-    <div className="header-navigation">
+    <div className="header-navigation" id="learning-navigation">
+      <p className="navigation-label">学习空间</p>
       <nav className="app-nav" aria-label="学习导航">
         {links.map(link => <Link key={link.icon} to={link.to} className={`primary-nav-link${link.active ? ' active' : ''}`}
           aria-current={link.active ? 'page' : undefined}
-          aria-label={link.badge > 0 ? `${link.label}，全部单词本共 ${link.badge} 个待复习` : undefined}>
+          title={sidebarCollapsed ? link.label : undefined}
+          aria-label={link.badge > 0 ? `${link.label}，全部单词本共 ${link.badge} 个待复习` : link.label}>
           <NavigationIcon name={link.icon} />
           <span>{link.label}</span>
           {link.badge > 0 && <span className="nav-badge" aria-hidden="true">{link.badge > 99 ? '99+' : link.badge}</span>}
         </Link>)}
       </nav>
-      <Link to={`/word/new${notebookQuery}`} className={`header-add${adding ? ' active' : ''}`} aria-current={adding ? 'page' : undefined}>
+      <Link to={`/word/new${notebookQuery}`} className={`header-add${adding ? ' active' : ''}`} aria-label="添加单词" title={sidebarCollapsed ? '添加单词' : undefined} aria-current={adding ? 'page' : undefined}>
         <NavigationIcon name="plus" /><span>添加单词</span>
       </Link>
     </div>

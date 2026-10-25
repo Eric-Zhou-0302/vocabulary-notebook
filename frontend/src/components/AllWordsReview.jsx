@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 
 function shuffle(items) {
   const result = [...items]
@@ -18,6 +18,7 @@ export default function AllWordsReview({ words, notebookNames }) {
   const [flipped, setFlipped] = useState(false)
   const [done, setDone] = useState(false)
   const actionsRef = useRef(null)
+  const answerId = useId()
 
   const deck = useMemo(() => {
     const alphabetic = [...words].sort((a, b) => a.word.localeCompare(b.word, 'en'))
@@ -34,7 +35,8 @@ export default function AllWordsReview({ words, notebookNames }) {
 
   useEffect(() => {
     if (flipped) {
-      actionsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'
+      actionsRef.current?.scrollIntoView({ behavior, block: 'nearest' })
     }
   }, [flipped])
 
@@ -113,9 +115,10 @@ export default function AllWordsReview({ words, notebookNames }) {
   return (
     <div className="srs-container all-review-container">
       <div className="all-review-toolbar">
-        <div className="order-switch" role="group" aria-label="单词顺序">
+        <div className="order-switch" role="group" aria-label="单词顺序" onKeyDown={event => { if (!['/', '?'].includes(event.key)) event.stopPropagation() }}>
           <button
             type="button"
+            aria-pressed={order === 'alpha'}
             className={order === 'alpha' ? 'active' : ''}
             onClick={() => changeOrder('alpha')}
           >
@@ -123,6 +126,7 @@ export default function AllWordsReview({ words, notebookNames }) {
           </button>
           <button
             type="button"
+            aria-pressed={order === 'random'}
             className={order === 'random' ? 'active' : ''}
             onClick={() => changeOrder('random')}
           >
@@ -139,19 +143,20 @@ export default function AllWordsReview({ words, notebookNames }) {
         type="button"
         className="flashcard"
         onClick={() => !flipped && setFlipped(true)}
-        aria-label={flipped ? `${current.word} 的释义` : `单词 ${current.word}，点击查看释义`}
+        aria-label={flipped ? `${current.word}，答案已展开` : `单词 ${current.word}，点击查看释义`}
+        aria-describedby={flipped ? answerId : undefined}
         aria-pressed={flipped}
       >
         <span
           key={`${order}-${randomSeed}-${index}-${current.id}`}
           className={`flashcard-inner ${flipped ? 'flipped' : ''}`}
         >
-          <span className="flashcard-front">
+          <span className="flashcard-front" aria-hidden={flipped}>
             <span className="word-display">{current.word}</span>
             {current.phonetic && <span className="phonetic-display">{current.phonetic}</span>}
             <span className="flip-hint">点击或按空格查看答案</span>
           </span>
-          <span className="flashcard-back">
+          <span className="flashcard-back" id={answerId} aria-hidden={!flipped}>
             <span className="word-display">{current.word}</span>
             {current.phonetic && <span className="phonetic-display">{current.phonetic}</span>}
             <span className="definition-display">{current.definition}</span>

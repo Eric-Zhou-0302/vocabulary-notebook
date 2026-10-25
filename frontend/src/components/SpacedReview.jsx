@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 
 const RATINGS = [
   { value: 1, label: '重来', className: 'rating-again' },
@@ -14,6 +14,7 @@ export default function SpacedReview({ cards, onRate, onReload, notebookNames })
   const [done, setDone] = useState(false)
   const [summary, setSummary] = useState({ ratings: 0, newWords: 0, again: 0 })
   const ratingGridRef = useRef(null)
+  const answerId = useId()
 
   useEffect(() => {
     setQueue(cards)
@@ -27,7 +28,8 @@ export default function SpacedReview({ cards, onRate, onReload, notebookNames })
 
   useEffect(() => {
     if (flipped) {
-      ratingGridRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'
+      ratingGridRef.current?.scrollIntoView({ behavior, block: 'nearest' })
     }
   }, [flipped])
 
@@ -58,7 +60,7 @@ export default function SpacedReview({ cards, onRate, onReload, notebookNames })
   useEffect(() => {
     function handleKey(event) {
       const tagName = event.target?.tagName
-      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'BUTTON' || tagName === 'SELECT') return
+      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'BUTTON' || tagName === 'SELECT' || event.target?.isContentEditable) return
       if (event.ctrlKey || event.metaKey || event.altKey) return
 
       if ((event.key === ' ' || event.key === 'Enter') && current && !flipped) {
@@ -103,20 +105,21 @@ export default function SpacedReview({ cards, onRate, onReload, notebookNames })
         type="button"
         className="flashcard"
         onClick={() => !flipped && setFlipped(true)}
-        aria-label={flipped ? `${current.word} 的释义` : `单词 ${current.word}，点击查看释义`}
+        aria-label={flipped ? `${current.word}，答案已展开` : `单词 ${current.word}，点击查看释义`}
+        aria-describedby={flipped ? answerId : undefined}
         aria-pressed={flipped}
       >
         <span
           key={`${current.id}-${current.srs?.reps ?? 0}`}
           className={`flashcard-inner ${flipped ? 'flipped' : ''}`}
         >
-          <span className="flashcard-front">
+          <span className="flashcard-front" aria-hidden={flipped}>
             {current.is_new && <span className="card-kicker">新词</span>}
             <span className="word-display">{current.word}</span>
             {current.phonetic && <span className="phonetic-display">{current.phonetic}</span>}
             <span className="flip-hint">点击或按空格查看答案</span>
           </span>
-          <span className="flashcard-back">
+          <span className="flashcard-back" id={answerId} aria-hidden={!flipped}>
             <span className="word-display">{current.word}</span>
             {current.phonetic && <span className="phonetic-display">{current.phonetic}</span>}
             <span className="definition-display">{current.definition}</span>

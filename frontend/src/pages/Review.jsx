@@ -4,6 +4,7 @@ import { fetchReviewDue, fetchReviewStats, fetchWords, rateWord } from '../api'
 import AllWordsReview from '../components/AllWordsReview'
 import SpacedReview from '../components/SpacedReview'
 import { useNotebooks } from '../useNotebooks'
+import '../components/ReviewPolish.css'
 
 export default function Review() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -14,37 +15,49 @@ export default function Review() {
 
   return (
     <div className="review-page">
-      <div className="notebook-scope">
-        <label htmlFor="review-notebook">复习范围</label>
-        <select
-          id="review-notebook"
-          className="notebook-select"
-          value={notebookId}
-          disabled={booksLoading || Boolean(booksError)}
-          onKeyDown={event => event.stopPropagation()}
-          onChange={event => setSearchParams(previous => {
-            const next = new URLSearchParams(previous)
-            if (event.target.value) next.set('notebook_id', event.target.value)
-            else next.delete('notebook_id')
-            return next
-          })}
-        >
-          <option value="">全部单词本</option>
-          {notebookId && !notebooks.some(book => book.id === notebookId) && <option value={notebookId} disabled>{booksLoading ? '加载单词本…' : '此单词本已不可用'}</option>}
-          {notebooks.map(book => <option key={book.id} value={book.id}>{book.name} · {book.word_count} 词</option>)}
-        </select>
-        <Link className="btn btn-ghost" to="/notebooks">管理单词本</Link>
+      <div className="review-controls">
+        <div className="review-mode-tabs" role="group" aria-label="复习模式" onKeyDown={event => { if (!['/', '?'].includes(event.key)) event.stopPropagation() }}>
+          <button type="button" aria-pressed={mode === 'daily'} className={mode === 'daily' ? 'active' : ''} onClick={() => setMode('daily')}>
+            今日复习
+          </button>
+          <button type="button" aria-pressed={mode === 'all'} className={mode === 'all' ? 'active' : ''} onClick={() => setMode('all')}>
+            全部单词
+          </button>
+        </div>
+        <div className="review-scope-controls">
+          <label htmlFor="review-notebook">复习范围</label>
+          <select
+            id="review-notebook"
+            className="notebook-select"
+            value={notebookId}
+            disabled={booksLoading || Boolean(booksError)}
+            onKeyDown={event => event.stopPropagation()}
+            onChange={event => setSearchParams(previous => {
+              const next = new URLSearchParams(previous)
+              if (event.target.value) next.set('notebook_id', event.target.value)
+              else next.delete('notebook_id')
+              return next
+            })}
+          >
+            <option value="">全部单词本</option>
+            {notebookId && !notebooks.some(book => book.id === notebookId) && <option value={notebookId} disabled>{booksLoading ? '加载单词本…' : '此单词本已不可用'}</option>}
+            {notebooks.map(book => <option key={book.id} value={book.id}>{book.name} · {book.word_count} 词</option>)}
+          </select>
+        </div>
       </div>
       {booksError && <p role="alert">{booksError} <button type="button" className="btn btn-ghost" onClick={refreshBooks}>重试</button></p>}
-      <p className="added-words-hint">同一单词在各本中独立记录复习进度；每日新词额度由所有单词本共用。</p>
       {bookUnavailable ? <div className="empty-state"><p>此单词本已不存在，请选择其他单词本。</p></div> : (
-        <ReviewSession key={`${notebookId}:${mode}`} notebookId={notebookId} notebooks={notebooks} mode={mode} setMode={setMode} />
+        <ReviewSession key={`${notebookId}:${mode}`} notebookId={notebookId} notebooks={notebooks} mode={mode} />
       )}
+      <footer className="review-footnote">
+        <p>各单词本独立记录复习进度，每日新词额度共用。</p>
+        <Link to="/notebooks">管理单词本 <span aria-hidden="true">↗</span></Link>
+      </footer>
     </div>
   )
 }
 
-function ReviewSession({ notebookId, notebooks, mode, setMode }) {
+function ReviewSession({ notebookId, notebooks, mode }) {
   const [cards, setCards] = useState([])
   const [stats, setStats] = useState(null)
   const [allWords, setAllWords] = useState([])
@@ -115,12 +128,13 @@ function ReviewSession({ notebookId, notebooks, mode, setMode }) {
 
   return (
     <div>
-      {toast && <div className="toast toast-error">{toast}</div>}
+      {toast && <div className="toast toast-error" role="alert">{toast}</div>}
 
       <header className="review-header">
         <div>
-          <p className="review-eyebrow">Spaced repetition</p>
+          <p className="review-eyebrow">{mode === 'daily' ? 'Spaced repetition' : 'At your own pace'}</p>
           <h2>{mode === 'daily' ? '今日复习' : '全部单词'}</h2>
+          <p className="review-intro">{mode === 'daily' ? '先回忆，再翻面。按记忆程度安排下一次复习。' : '按字母或随机翻阅，不影响每日复习计划。'}</p>
         </div>
         {mode === 'daily' && stats && (
           <dl className="review-stats" aria-label="复习统计">
@@ -137,27 +151,6 @@ function ReviewSession({ notebookId, notebooks, mode, setMode }) {
         )}
       </header>
 
-      <div className="review-mode-tabs" role="tablist" aria-label="复习模式">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'daily'}
-          className={mode === 'daily' ? 'active' : ''}
-          onClick={() => setMode('daily')}
-        >
-          今日复习
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'all'}
-          className={mode === 'all' ? 'active' : ''}
-          onClick={() => setMode('all')}
-        >
-          全部单词
-        </button>
-      </div>
-
       {error ? (
         <div className="empty-state">
           <p>{error}</p>
@@ -170,7 +163,7 @@ function ReviewSession({ notebookId, notebooks, mode, setMode }) {
           </button>
         </div>
       ) : loading ? (
-        <div className="loading">
+        <div className="loading" role="status">
           {mode === 'daily' ? '加载复习队列…' : '加载全部单词…'}
         </div>
       ) : mode === 'all' ? (

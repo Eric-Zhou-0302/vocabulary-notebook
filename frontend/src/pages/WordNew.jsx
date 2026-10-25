@@ -4,6 +4,8 @@ import { createWord, fetchWord } from '../api'
 import { useSSE } from '../useSSE'
 import WordCard from '../components/WordCard'
 import { useNotebooks } from '../useNotebooks'
+import NavigationIcon from '../components/NavigationIcon'
+import './NotebookPolish.css'
 
 function useProviderLabel() {
   const [label, setLabel] = useState('模型')
@@ -33,6 +35,10 @@ export default function WordNew() {
   const navigate = useNavigate()
   const providerLabel = useProviderLabel()
   useEffect(() => { addedRef.current = addedWords }, [addedWords])
+  useEffect(() => {
+    // 手机端不自动唤起键盘，保留用户先选择单词本的空间。
+    if (window.matchMedia('(min-width: 641px) and (pointer: fine)').matches) inputRef.current?.focus()
+  }, [])
 
   const updateAdded = useCallback(result => {
     setAddedWords(previous => previous.map(entry => {
@@ -127,28 +133,33 @@ export default function WordNew() {
   }
 
   return (
-    <div>
-      {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
-      <h2 style={{ marginBottom: 20 }}>添加单词</h2>
-      <form onSubmit={handleSubmit}>
+    <div className="word-new-page">
+      {toast && <div className={`toast toast-${toast.type}`} role={toast.type === 'error' ? 'alert' : 'status'}>{toast.msg}</div>}
+      <header className="word-new-heading">
+        <h2>添加单词</h2>
+        <p>记下遇见的新词，释义、音标和例句交给 {providerLabel}。</p>
+      </header>
+      <form className="word-new-form" onSubmit={handleSubmit}>
         <div className="form-group">
           <label htmlFor="new-word-notebook">保存到单词本</label>
-          <select
-            id="new-word-notebook"
-            className="notebook-select"
-            value={notebookId}
-            disabled={loading || booksLoading || Boolean(booksError)}
-            onKeyDown={event => event.stopPropagation()}
-            onChange={event => setSearchParams(previous => {
-              const next = new URLSearchParams(previous)
-              next.set('notebook_id', event.target.value)
-              return next
-            })}
-          >
-            {!selectedBook && <option value={notebookId} disabled>{booksLoading ? '加载单词本…' : '此单词本已不可用，请重新选择'}</option>}
-            {notebooks.map(book => <option key={book.id} value={book.id}>{book.name}</option>)}
-          </select>
-          <Link className="btn btn-ghost" to="/notebooks">管理单词本</Link>
+          <div className="word-new-destination">
+            <select
+              id="new-word-notebook"
+              className="notebook-select"
+              value={notebookId}
+              disabled={loading || booksLoading || Boolean(booksError)}
+              onKeyDown={event => event.stopPropagation()}
+              onChange={event => setSearchParams(previous => {
+                const next = new URLSearchParams(previous)
+                next.set('notebook_id', event.target.value)
+                return next
+              })}
+            >
+              {!selectedBook && <option value={notebookId} disabled>{booksLoading ? '加载单词本…' : '此单词本已不可用，请重新选择'}</option>}
+              {notebooks.map(book => <option key={book.id} value={book.id}>{book.name}</option>)}
+            </select>
+            <Link className="btn btn-ghost" to="/notebooks">管理单词本</Link>
+          </div>
           {booksError && <p role="alert">{booksError} <button type="button" className="btn btn-ghost" onClick={refreshBooks}>重试</button></p>}
         </div>
         <div className="form-group">
@@ -160,22 +171,26 @@ export default function WordNew() {
             value={word}
             onChange={e => setWord(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="输入英文单词，回车保存"
-            autoFocus
+            placeholder="输入英文单词…"
+            aria-describedby="new-word-hint"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
           />
+          <p id="new-word-hint" className="word-new-field-hint">新词首字母统一大写，其余字符保留输入时的大小写。</p>
         </div>
         <div className="btn-group">
           <button type="submit" className="btn btn-primary" disabled={loading || booksLoading || Boolean(booksError) || !selectedBook}>
-            {loading ? '保存中…' : '保存'}
+            <NavigationIcon name="plus" />{loading ? '保存中…' : '保存单词'}
           </button>
           <button type="button" className="btn btn-secondary" onClick={() => navigate(-1)}>
             取消
           </button>
         </div>
-        <p style={{ marginTop: 14, fontSize: 12, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
-          Enter 保存 · Esc 返回 · 释义/音标/例句由 {providerLabel} 自动补充
-          <br />新词首字母统一大写，其余字符保持输入的大小写；已有词条不改名。
-        </p>
+        <div className="word-new-form-footer">
+          <span>保存后可继续输入，补全结果会显示在下方。</span>
+          <span className="word-new-shortcuts"><kbd>Enter</kbd> 保存 <span>·</span> <kbd>Esc</kbd> 返回</span>
+        </div>
       </form>
       {addedWords.length > 0 && <section className="added-words" aria-labelledby="added-words-heading">
         <h3 id="added-words-heading">刚刚添加 · 即时记忆</h3>

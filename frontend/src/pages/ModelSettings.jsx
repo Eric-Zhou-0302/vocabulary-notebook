@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import NavigationIcon from '../components/NavigationIcon'
+import './SettingsPolish.css'
 
 async function request(path, options = {}) {
   const response = await fetch(`/api/model-settings${path}`, {
@@ -74,8 +77,14 @@ export default function ModelSettings() {
   const unavailable = models !== null && ds.model && !models.includes(ds.model)
   return (
     <section className="model-settings">
-      <h2>模型设置</h2>
-      <p className="settings-note">选择用于补充音标、释义和例句的模型，保存后立即生效。</p>
+      <header className="model-settings-heading">
+        <h2>模型设置</h2>
+        <p>选择用于补充音标、释义和例句的模型，保存后立即生效。</p>
+      </header>
+      <nav className="settings-page-nav" aria-label="设置页面">
+        <Link to="/settings" aria-current="page"><NavigationIcon name="model" />模型设置</Link>
+        <Link to="/sync-settings"><NavigationIcon name="cloud" />同步与备份</Link>
+      </nav>
       <form onSubmit={save}>
         <fieldset disabled={saving}>
           <div className="settings-section-heading"><span className="settings-step">01</span><h3 id="provider-heading">选择供应商</h3></div>
