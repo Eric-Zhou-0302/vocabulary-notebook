@@ -16,94 +16,20 @@
 - **同步与备份**：可选 Google Drive 桌面文件夹或 API 直连；支持完整学习历史备份和合并导入。
 - **界面与操作**：深浅色主题、手机布局、桌面可收起侧栏，以及搜索、翻卡和评分快捷键。
 
-应用用于个人电脑本地运行。网页模式的后端只监听 `127.0.0.1:1400`；Electron 桌面模式使用自动分配的本机端口。不提供公网部署或多用户登录功能。跨电脑学习使用同步功能，详见 [Drive 同步指南](docs/DRIVE_SYNC.md)。
+应用在个人电脑本地运行，支持桌面应用和网页两种使用方式。跨电脑学习可通过 Google Drive 同步，详见 [Drive 同步指南](docs/DRIVE_SYNC.md)。
 
 ## macOS / Windows 桌面版
 
-项目提供 Electron 桌面入口和安装包构建流程，使用同一套 React 界面与 Python 后端。安装包内置 Python 运行环境，使用者无需另装 Python 或 Node.js；AI 补全仍需自行配置 Ollama 或 DeepSeek。
+桌面版采用 Electron，内置运行环境，无需安装 Python、Node.js 或使用命令行。
 
-### 当前状态
+[下载应用 →](https://github.com/Eric-Zhou-0302/vocabulary-notebook/releases)
 
-桌面版尚未发布到 GitHub Releases。以下为截至 **2026-10-25** 的开发验证状态，已有的 v1.2.0 Release 不包含本次桌面安装包。
-
-| 平台 | 目标产物 | 验证状态 |
-| --- | --- | --- |
-| macOS Apple Silicon（arm64） | `.app`、`.dmg`、`.zip` | 已本地构建；打包后启动、增删改查、复习、备份导入、PDF / CSV / JSON 导出、原生下载及退出通过验证 |
-| macOS Intel（x64） | `.app`、`.dmg`、`.zip` | 构建流程已配置，尚未构建与验收 |
-| Windows x64 | NSIS `.exe` 安装包 | 构建流程已配置，尚未生成安装包与验收 |
-
-本地构建产物位于 `desktop/release/`，不提交 Git。当前为开发测试版：macOS 使用临时签名，尚未配置 Developer ID 签名与 Apple 公证；Windows 尚未配置发布签名。真实模型调用、Google OAuth 和跨设备同步仍需单独验收。
-
-### 从源码启动桌面窗口
-
-需要 Python **3.11+**、Node.js **22.13+（22.x）或 24+**。从项目根目录执行；已有对应 Python 环境时，可跳过创建和安装依赖的步骤：
-
-**macOS：**
-
-```bash
-python3.11 -m venv .venv
-./.venv/bin/python -m pip install -r requirements.txt
-npm --prefix desktop ci
-VOCAB_DESKTOP_PYTHON="$PWD/.venv/bin/python" npm --prefix desktop start
-```
-
-**Windows PowerShell：**
-
-```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-npm --prefix desktop ci
-$env:VOCAB_DESKTOP_PYTHON = (Resolve-Path .\.venv\Scripts\python.exe).Path
-npm --prefix desktop start
-```
-
-桌面入口会自动创建自己的无密钥配置并启动后端，无需额外运行 `app.py` 或复制项目内的 `config.json`。首次进入后，在「设置与工具 → 模型设置」选择实际使用的模型。`VOCAB_DESKTOP_PYTHON` 也可指向其他现有项目环境的解释器绝对路径，例如独立 worktree 复用原项目 `.venv`。
-
-桌面窗口读取已提交的 `frontend/dist`。修改前端源码后，需先安装前端依赖并运行 `npm --prefix frontend run build`。
-
-<details>
-<summary>自行构建 macOS / Windows 安装包</summary>
-
-在目标操作系统和架构上运行以下命令；使用独立 `.venv-desktop`，保留原网页开发环境。
-
-**macOS：**
-
-```bash
-python3.11 -m venv .venv-desktop
-./.venv-desktop/bin/python -m pip install -r requirements-desktop.txt
-npm --prefix frontend ci
-npm --prefix desktop ci
-VOCAB_DESKTOP_PYTHON="$PWD/.venv-desktop/bin/python" npm --prefix desktop run dist
-```
-
-**Windows PowerShell：**
-
-```powershell
-py -3.11 -m venv .venv-desktop
-.\.venv-desktop\Scripts\python.exe -m pip install -r requirements-desktop.txt
-npm --prefix frontend ci
-npm --prefix desktop ci
-$env:VOCAB_DESKTOP_PYTHON = (Resolve-Path .\.venv-desktop\Scripts\python.exe).Path
-npm --prefix desktop run dist
-```
-
-`dist` 依次构建前端、冻结 Python 后端、生成当前平台的安装包，结果放在 `desktop/release/`。只需要可运行应用目录时，使用 `npm --prefix desktop run pack`。macOS 产物不能作为 Windows 后端使用；Apple Silicon 和 Intel 也需分别构建。
-
-仓库另提供 [手动构建工作流](.github/workflows/desktop-build.yml)。首次使用 GitHub 手动触发前，工作流需先进入默认分支；它仅生成构建产物，不发布 Release。具体条件见 [桌面版指南](docs/DESKTOP.md#检查与平台验收)。
-
-</details>
-
-### 数据保存与迁移
-
-| 运行方式 | 默认数据目录 |
+| 系统 | 安装方式 |
 | --- | --- |
-| macOS 安装版 | `~/Library/Application Support/Vocabulary Notebook/data` |
-| Windows 安装版 | `%APPDATA%\Vocabulary Notebook\data` |
-| 源码开发版 | 对应系统目录下的 `Vocabulary Notebook Dev/data` |
+| macOS | 选择与芯片匹配的安装包（Apple Silicon / Intel），打开 `.dmg`，将应用拖入「应用程序」 |
+| Windows | 下载 `.exe` 安装包，双击并按提示完成安装 |
 
-可通过应用菜单「文件 → 打开数据目录」查看词库与配置。桌面版首次启动使用独立词库，不自动读取或搬迁网页版本的数据；迁移时，在原应用「同步与备份」下载**完整备份**，再在桌面版导入，并重新配置模型和 Google Drive 授权。普通列表导出不能替代完整学习历史备份。
-
-Windows 中文 / 音标 PDF 导出需用 `VOCABULARY_CJK_FONT` 指定静态 TTF / OTF 字体，安装包不附带字体；具体要求见下方「导出与完整备份」。开发检查、临时数据隔离及撤回步骤见 [桌面版指南](docs/DESKTOP.md)。桌面开发保留在独立分支与 worktree 时，停止桌面程序后可继续使用原项目；撤回代码不会自动删除独立保存的桌面数据。
+安装后直接打开 **Vocabulary Notebook**，在「设置与工具 → 模型设置」配置 Ollama 或 DeepSeek，即可开始记录和复习单词。
 
 ## 界面预览
 
@@ -122,7 +48,7 @@ Windows 中文 / 音标 PDF 导出需用 `VOCABULARY_CJK_FONT` 指定静态 TTF 
 
 </details>
 
-## 快速开始
+## 网页版快速开始
 
 ### 环境
 
