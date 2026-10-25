@@ -7,7 +7,7 @@ const RATINGS = [
   { value: 4, label: '简单', className: 'rating-easy' },
 ]
 
-export default function SpacedReview({ cards, onRate, onReload }) {
+export default function SpacedReview({ cards, onRate, onReload, notebookNames }) {
   const [queue, setQueue] = useState([])
   const [flipped, setFlipped] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -58,7 +58,7 @@ export default function SpacedReview({ cards, onRate, onReload }) {
   useEffect(() => {
     function handleKey(event) {
       const tagName = event.target?.tagName
-      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'BUTTON') return
+      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'BUTTON' || tagName === 'SELECT') return
       if (event.ctrlKey || event.metaKey || event.altKey) return
 
       if ((event.key === ' ' || event.key === 'Enter') && current && !flipped) {
@@ -97,6 +97,7 @@ export default function SpacedReview({ cards, onRate, onReload }) {
       <div className="srs-progress" aria-live="polite">
         本轮剩余 {queue.length} 张 · 空格翻面 · 1–4 评分
       </div>
+      {notebookNames && <div className="srs-progress" aria-live="polite">单词本：{notebookNames[current.notebook_id || 'default'] || '加载中…'}</div>}
 
       <button
         type="button"

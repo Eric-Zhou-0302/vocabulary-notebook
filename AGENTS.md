@@ -11,10 +11,18 @@
 
 原因：`python app.py` 模式下，后端只读取 `frontend/dist` 的预编译文件，改源码不会自动同步，必须手动 build 才能让改动生效。
 
-## 开发模式（推荐）
+## 开发模式
+
+需要热更新时，从项目根目录分别在两个终端启动服务：
 
 ```bash
-./start.sh
+# 后端
+./.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 1400 --no-proxy-headers --reload
 ```
 
-同时启动后端（uvicorn with --reload）和前端（Vite 热更新），前端改代码秒级生效。
+```bash
+# 前端
+cd frontend && npm run dev -- --host 127.0.0.1
+```
+
+前端开发页面为 http://localhost:5173，源码修改会自动更新。日常使用可直接运行 `python app.py`，由后端托管已构建的前端。

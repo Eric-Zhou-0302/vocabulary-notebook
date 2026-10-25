@@ -15,14 +15,14 @@ async function request(url, options = {}) {
   return res
 }
 
-export async function fetchWords({ q = '', date = '', page = 1, size = 20, sort = '', letter = '' } = {}) {
-  const params = new URLSearchParams({ q, date, page, size, sort, letter })
+export async function fetchWords({ q = '', date = '', page = 1, size = 20, sort = '', letter = '', notebook_id = '' } = {}) {
+  const params = new URLSearchParams({ q, date, page, size, sort, letter, notebook_id })
   const res = await request(`/words?${params}`)
   return res.json()
 }
 
-export async function fetchDates() {
-  const res = await request('/dates')
+export async function fetchDates(notebook_id = '') {
+  const res = await request(`/dates?${new URLSearchParams({ notebook_id })}`)
   return res.json()
 }
 
@@ -31,12 +31,14 @@ export async function fetchWord(id) {
   return res.json()
 }
 
-export async function createWord(word, definition = '') {
+export async function createWord(word, definition = '', notebook_id = 'default') {
   const res = await request('/words', {
     method: 'POST',
-    body: JSON.stringify({ word, definition }),
+    body: JSON.stringify({ word, definition, notebook_id }),
   })
-  return res.json()
+  const result = await res.json()
+  notifyLibraryChanged()
+  return result
 }
 
 export async function updateWord(id, data) {
@@ -44,30 +46,33 @@ export async function updateWord(id, data) {
     method: 'PUT',
     body: JSON.stringify(data),
   })
-  return res.json()
+  const result = await res.json()
+  notifyLibraryChanged()
+  return result
 }
 
 export async function deleteWord(id) {
   await request(`/words/${id}`, { method: 'DELETE' })
+  notifyLibraryChanged()
 }
 
-export function exportUrl(format, { q = '', date = '', sort = '' } = {}) {
-  const params = new URLSearchParams({ format, q, date, sort })
+export function exportUrl(format, { q = '', date = '', sort = '', letter = '', notebook_id = '' } = {}) {
+  const params = new URLSearchParams({ format, q, date, sort, letter, notebook_id })
   return `${BASE}/words/export?${params}`
 }
 
-export async function enrichMissing() {
-  const res = await request('/words/enrich-missing', { method: 'POST' })
+export async function enrichMissing(notebook_id = '') {
+  const res = await request(`/words/enrich-missing?${new URLSearchParams({ notebook_id })}`, { method: 'POST' })
   return res.json()
 }
 
-export async function fetchReviewStats() {
-  const res = await request('/review/stats')
+export async function fetchReviewStats(notebook_id = '') {
+  const res = await request(`/review/stats?${new URLSearchParams({ notebook_id })}`)
   return res.json()
 }
 
-export async function fetchReviewDue(limit = 20) {
-  const params = new URLSearchParams({ limit: String(limit) })
+export async function fetchReviewDue(limit = 20, notebook_id = '') {
+  const params = new URLSearchParams({ limit: String(limit), notebook_id })
   const res = await request(`/review/due?${params}`)
   return res.json()
 }
@@ -84,4 +89,44 @@ export async function rateWord(wordId, rating) {
 
 export async function libraryRequest(path, method = 'GET', body) {
   return (await request(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json()
+}
+
+
+function notifyLibraryChanged() {
+  window.dispatchEvent(new Event('notebooks-changed'))
+  window.dispatchEvent(new Event('review-stats-changed'))
+}
+
+export async function fetchNotebooks() {
+  return (await request('/notebooks')).json()
+}
+
+export async function createNotebook(data) {
+  const result = await libraryRequest('/notebooks', 'POST', data)
+  notifyLibraryChanged()
+  return result
+}
+
+export async function updateNotebook(id, data) {
+  const result = await libraryRequest(`/notebooks/${encodeURIComponent(id)}`, 'PUT', data)
+  notifyLibraryChanged()
+  return result
+}
+
+export async function deleteNotebook(id) {
+  const result = await libraryRequest(`/notebooks/${encodeURIComponent(id)}`, 'DELETE')
+  notifyLibraryChanged()
+  return result
+}
+
+export async function moveWords(word_ids, notebook_id) {
+  const result = await libraryRequest('/words/move', 'POST', { word_ids, notebook_id })
+  notifyLibraryChanged()
+  return result
+}
+
+export async function copyWords(word_ids, notebook_id) {
+  const result = await libraryRequest('/words/copy', 'POST', { word_ids, notebook_id })
+  notifyLibraryChanged()
+  return result
 }

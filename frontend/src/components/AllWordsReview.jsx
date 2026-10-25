@@ -11,7 +11,7 @@ function shuffle(items) {
   return result
 }
 
-export default function AllWordsReview({ words }) {
+export default function AllWordsReview({ words, notebookNames }) {
   const [order, setOrder] = useState('alpha')
   const [randomSeed, setRandomSeed] = useState(0)
   const [index, setIndex] = useState(0)
@@ -64,7 +64,7 @@ export default function AllWordsReview({ words }) {
   useEffect(() => {
     function handleKey(event) {
       const tagName = event.target?.tagName
-      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || event.target?.isContentEditable) return
+      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || event.target?.isContentEditable) return
       if (event.ctrlKey || event.metaKey || event.altKey) return
 
       if ((event.key === ' ' || event.key === 'Enter') && current && !flipped) {
@@ -133,6 +133,7 @@ export default function AllWordsReview({ words }) {
           第 {index + 1} / {deck.length} 个 · 空格翻面 · ← → 切换
         </div>
       </div>
+      {notebookNames && <div className="srs-progress" aria-live="polite">单词本：{notebookNames[current.notebook_id || 'default'] || '加载中…'}</div>}
 
       <button
         type="button"

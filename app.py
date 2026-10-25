@@ -610,7 +610,8 @@ def _predicted_intervals(srs_state: Optional[dict], now: datetime) -> dict[str, 
     return intervals
 
 
-def _review_stats_for(words: list[dict], now: datetime, daily_new_limit: int) -> dict:
+def _review_stats_for(words: list[dict], now: datetime, daily_new_limit: int,
+                      new_today: Optional[int] = None) -> dict:
     """计算当前复习统计；损坏的 SRS 状态不应拖垮整个列表。"""
     reviewable = [word for word in words if word.get("definition", "").strip()]
     new_words = [word for word in reviewable if not word.get("srs")]
@@ -625,7 +626,8 @@ def _review_stats_for(words: list[dict], now: datetime, daily_new_limit: int) ->
         except (KeyError, TypeError, ValueError):
             invalid_count += 1
 
-    new_today = _new_reviews_today(reviewable, now)
+    if new_today is None:
+        new_today = _new_reviews_today(reviewable, now)
     new_quota = max(0, daily_new_limit - new_today)
     return {
         "total": len(reviewable),
@@ -889,6 +891,80 @@ async def health_check():
     return {"provider": config.get_provider(), "status": "disconnected"}
 
 
+# ─── API: 单词本 ─────────────────────────────────────────
+
+def _require_notebook(data: dict, notebook_id: str) -> dict:
+    book = next((book for book in data["notebooks"] if book["id"] == notebook_id), None)
+    if book is None:
+        raise HTTPException(404, "单词本不存在")
+    return book
+
+
+def _notebook_words(data: dict, notebook_id: str = "") -> list:
+    if not notebook_id:
+        return data["words"]
+    _require_notebook(data, notebook_id)
+    return [word for word in data["words"]
+            if word.get("notebook_id", sync_storage.DEFAULT_BOOK) == notebook_id]
+
+
+def _notebook_response(book: dict, words: list) -> dict:
+    return {**book, "word_count": sum(word.get("notebook_id", sync_storage.DEFAULT_BOOK) == book["id"]
+                                     for word in words)}
+
+
+def _notebook_fields(body: dict, data: dict, current: Optional[dict] = None) -> dict:
+    name = _text(body, "name", default=current["name"] if current else "", limit=80)
+    description = _text(body, "description", default=current.get("description", "") if current else "", limit=500)
+    if not name:
+        raise HTTPException(422, "单词本名称不能为空")
+    if any(book["name"].casefold() == name.casefold() and (not current or book["id"] != current["id"])
+           for book in data["notebooks"]):
+        raise HTTPException(409, "已存在同名的单词本")
+    return {"name": name, "description": description}
+
+
+@app.get("/api/notebooks")
+def list_notebooks():
+    data = load_words()
+    return {"notebooks": [_notebook_response(book, data["words"]) for book in data["notebooks"]],
+            "total_words": len(data["words"])}
+
+
+@app.post("/api/notebooks")
+def create_notebook(body: dict):
+    with _write_lock:
+        data = load_words()
+        book = {"id": uuid.uuid4().hex[:12], **_notebook_fields(body, data), "created_at": now_iso()}
+        data["notebooks"].append(book)
+        save_words(data)
+        return _notebook_response(book, data["words"])
+
+
+@app.put("/api/notebooks/{notebook_id}")
+def update_notebook(notebook_id: str, body: dict):
+    with _write_lock:
+        data = load_words()
+        book = _require_notebook(data, notebook_id)
+        book.update(_notebook_fields(body, data, book))
+        save_words(data)
+        return _notebook_response(book, data["words"])
+
+
+@app.delete("/api/notebooks/{notebook_id}")
+def delete_notebook(notebook_id: str):
+    with _write_lock:
+        data = load_words()
+        _require_notebook(data, notebook_id)
+        if notebook_id == sync_storage.DEFAULT_BOOK:
+            raise HTTPException(409, "默认单词本用于保留未分类的单词，不能删除")
+        if any(word.get("notebook_id") == notebook_id for word in data["words"]):
+            raise HTTPException(409, "请先移出或删除本中的单词，再删除单词本")
+        data["notebooks"] = [book for book in data["notebooks"] if book["id"] != notebook_id]
+        save_words(data)
+        return {"ok": True, "moved_count": 0}
+
+
 # ─── API: 单词 CRUD ───────────────────────────────────────
 
 @app.get("/api/words")
@@ -899,15 +975,16 @@ def list_words(
     size: int = Query(default=20, ge=1, le=10000),
     sort: str = Query(default=""),
     letter: str = Query(default=""),
+    notebook_id: str = "",
 ):
     data = load_words()
     # 先按 q+date+sort 过滤一次，用于计算 available_letters（不含 letter 自身的影响）
-    pre_letter = _filter_words(data, q, date, sort)
+    pre_letter = _filter_words(data, q, date, sort, notebook_id=notebook_id)
     available_letters = sorted({
         w["word"][0].lower() for w in pre_letter if w.get("word")
     })
 
-    words = _filter_words(data, q, date, sort, letter)
+    words = _filter_words(data, q, date, sort, letter, notebook_id)
 
     total = len(words)
     start = (page - 1) * size
@@ -924,11 +1001,11 @@ def list_words(
 
 
 @app.get("/api/dates")
-def list_dates():
+def list_dates(notebook_id: str = ""):
     data = load_words()
     dates = sorted({
         w["created_at"][:10]
-        for w in data["words"]
+        for w in _notebook_words(data, notebook_id)
         if "created_at" in w
     }, reverse=True)
     return {"dates": dates}
@@ -937,23 +1014,26 @@ def list_dates():
 # ─── API: 间隔复习 ────────────────────────────────────────
 
 @app.get("/api/review/stats")
-def review_stats():
+def review_stats(notebook_id: str = ""):
     """返回导航角标和复习页需要的轻量统计。"""
     now = datetime.now(CHINA_TZ)
     daily_new_limit = config.get_srs_config()["daily_new_limit"]
-    return _review_stats_for(load_words()["words"], now, daily_new_limit)
+    data = load_words()
+    return _review_stats_for(_notebook_words(data, notebook_id), now, daily_new_limit,
+                             _new_reviews_today(data["words"], now))
 
 
 @app.get("/api/review/due")
-def review_due(limit: int = Query(default=20, ge=1, le=100)):
+def review_due(limit: int = Query(default=20, ge=1, le=100), notebook_id: str = ""):
     """返回一批到期卡片：逾期复习优先，再用新词填满剩余额度。"""
     now = datetime.now(CHINA_TZ)
     daily_new_limit = config.get_srs_config()["daily_new_limit"]
+    data = load_words()
     words = [
-        word for word in load_words()["words"]
+        word for word in _notebook_words(data, notebook_id)
         if word.get("definition", "").strip()
     ]
-    stats = _review_stats_for(words, now, daily_new_limit)
+    stats = _review_stats_for(words, now, daily_new_limit, _new_reviews_today(data["words"], now))
 
     due_reviews = []
     for word in words:
@@ -1064,9 +1144,11 @@ def export_words(
     q: str = Query(default=""),
     date: str = Query(default=""),
     sort: str = Query(default=""),
+    letter: str = "",
+    notebook_id: str = "",
 ):
     data = load_words()
-    words = _filter_words(data, q, date, sort)
+    words = _filter_words(data, q, date, sort, letter, notebook_id)
     today = datetime.now(CHINA_TZ).strftime("%Y-%m-%d")
 
     if format == "csv":
@@ -1094,7 +1176,11 @@ def export_words(
 
     # 默认 JSON
     out = io.StringIO()
-    json.dump({"words": words, "exported_at": now_iso()}, out, ensure_ascii=False, indent=2)
+    book_ids = {word.get("notebook_id", sync_storage.DEFAULT_BOOK) for word in words}
+    if notebook_id:
+        book_ids.add(notebook_id)
+    json.dump({"words": words, "notebooks": [book for book in data["notebooks"] if book["id"] in book_ids],
+               "exported_at": now_iso()}, out, ensure_ascii=False, indent=2)
     out.seek(0)
     return StreamingResponse(
         iter([out.getvalue()]),
@@ -1136,21 +1222,22 @@ def _maybe_reset_batch_if_idle() -> None:
 
 
 @app.post("/api/words/enrich-missing")
-async def enrich_missing():
+async def enrich_missing(notebook_id: str = ""):
     """扫描缺失 definition 的单词，跳过冷却期内已完成/进行中的。"""
     # 入口处先尝试重置上一批残留状态 — 即使下面 0 missing 提前 return，
     # 也能让 batch_total/batch_done 清零，避免污染后续观察。
     _maybe_reset_batch_if_idle()
     now = asyncio.get_event_loop().time()
     data = load_words()
+    words = _notebook_words(data, notebook_id)
     missing = [
-        w for w in data["words"]
+        w for w in words
         if not w.get("definition", "").strip()
         and _enriching_ids.get(w["id"], 0) + _ENRICH_COOLDOWN < now
     ]
     if not missing:
         in_cooldown = sum(
-            1 for w in data["words"]
+            1 for w in words
             if not w.get("definition", "").strip()
             and _enriching_ids.get(w["id"], 0) + _ENRICH_COOLDOWN >= now
         )
@@ -1190,6 +1277,71 @@ def _word_response(word: dict) -> dict:
     return {"word": word, "enrichment": state}
 
 
+def _word_selection(body: dict, data: dict) -> tuple[str, list]:
+    notebook_id = _text(body, "notebook_id", limit=200)
+    word_ids = body.get("word_ids")
+    if (not isinstance(word_ids, list) or not 1 <= len(word_ids) <= 10000
+            or any(not isinstance(word_id, str) or not 1 <= len(word_id) <= 200 for word_id in word_ids)):
+        raise HTTPException(422, "请选择 1 至 10000 个单词")
+    _require_notebook(data, notebook_id)
+    by_id = {word["id"]: word for word in data["words"]}
+    if not set(word_ids) <= by_id.keys():
+        raise HTTPException(404, "部分单词不存在，请刷新后重试")
+    return notebook_id, [by_id[word_id] for word_id in dict.fromkeys(word_ids)]
+
+
+def _check_word_destination(data: dict, word_text: str, notebook_id: str, word_id: str):
+    if any(word["id"] != word_id
+           and word.get("notebook_id", sync_storage.DEFAULT_BOOK) == notebook_id
+           and word["word"].casefold() == word_text.casefold() for word in data["words"]):
+        raise HTTPException(409, f"目标单词本已包含「{word_text}」，请保留或整理两条记录后再移动")
+
+
+@app.post("/api/words/move")
+def move_words(body: dict):
+    with _write_lock:
+        data = load_words()
+        notebook_id, selected = _word_selection(body, data)
+        spellings = set()
+        # 先校验整批，避免同拼写记录的独立复习进度被静默合并或只移动一半。
+        for word in selected:
+            if word.get("notebook_id", sync_storage.DEFAULT_BOOK) == notebook_id:
+                continue
+            _check_word_destination(data, word["word"], notebook_id, word["id"])
+            if word["word"].casefold() in spellings:
+                raise HTTPException(409, "所选单词包含不同单词本中的同名记录，请分开整理")
+            spellings.add(word["word"].casefold())
+        moved = 0
+        for word in selected:
+            if word.get("notebook_id", sync_storage.DEFAULT_BOOK) != notebook_id:
+                word["notebook_id"] = notebook_id
+                moved += 1
+                _new_enrichment_candidates.pop(word["id"], None)
+        save_words(data)
+        return {"ok": True, "moved_count": moved}
+
+
+@app.post("/api/words/copy")
+async def copy_words(body: dict):
+    with _write_lock:
+        data = load_words()
+        notebook_id, selected = _word_selection(body, data)
+        existing = {word["word"].casefold() for word in _notebook_words(data, notebook_id)}
+        copies = []
+        for word in selected:
+            if word["word"].casefold() in existing:
+                continue
+            copied = {key: word.get(key, "") for key in ("word", "definition", "phonetic", "example")}
+            copied.update(id=uuid.uuid4().hex[:12], notebook_id=notebook_id, created_at=now_iso())
+            copies.append(copied)
+            existing.add(word["word"].casefold())
+        if copies:
+            data["words"].extend(copies)
+            save_words(data)
+    await _enqueue_enrich_batch([(word["id"], word["word"]) for word in copies if not word["definition"].strip()])
+    return {"ok": True, "copied_count": len(copies), "skipped_count": len(selected) - len(copies)}
+
+
 @app.get("/api/words/{word_id}")
 def get_word(word_id: str):
     data = load_words()
@@ -1214,24 +1366,29 @@ async def create_word(body: dict):
 
     with _write_lock:
         data = load_words()
-        word_lower = word_text.lower()
+        notebook_id = _text(body, "notebook_id", default=sync_storage.DEFAULT_BOOK, limit=200)
+        _require_notebook(data, notebook_id)
+        word_lower = word_text.casefold()
 
-        # 重复检测：同单词已存在时返回 409，附上已有记录供前端提示
+        # 同一本内复用已有记录；跨本同拼写拥有独立身份和复习进度。
         for w in data["words"]:
-            if w["word"].lower() == word_lower:
+            if w["word"].casefold() == word_lower and w.get("notebook_id", sync_storage.DEFAULT_BOOK) == notebook_id:
                 raise HTTPException(
                     status_code=409,
                     detail={"message": f"「{w['word']}」已存在，已展示已有内容", **_word_response(w)},
                 )
 
+        matches = [word for word in data["words"] if word["word"].casefold() == word_lower]
+        source = max(matches, key=lambda word: sum(bool(word.get(key, "").strip())
+                     for key in ("definition", "phonetic", "example")), default={})
         word_id = uuid.uuid4().hex[:12]
         word_obj = {
             "id": word_id,
-            "notebook_id": "default",
+            "notebook_id": notebook_id,
             "word": word_text,
-            "definition": body.get("definition", "").strip(),
-            "phonetic": "",
-            "example": "",
+            "definition": _text(body, "definition") or source.get("definition", ""),
+            "phonetic": source.get("phonetic", ""),
+            "example": source.get("example", ""),
             "created_at": now_iso(),
         }
 
@@ -1418,10 +1575,20 @@ def update_word(word_id: str, body: dict):
         data = load_words()
         for w in data["words"]:
             if w["id"] == word_id:
+                notebook_id = w.get("notebook_id", sync_storage.DEFAULT_BOOK)
+                word_text = w["word"]
+                if "notebook_id" in body:
+                    notebook_id = _text(body, "notebook_id", limit=200)
+                    _require_notebook(data, notebook_id)
                 if "word" in body:
-                    w["word"] = body["word"].strip()
+                    word_text = _text(body, "word", limit=200)
+                    if not word_text:
+                        raise HTTPException(422, "单词不能为空")
+                if notebook_id != w.get("notebook_id", sync_storage.DEFAULT_BOOK) or word_text.casefold() != w["word"].casefold():
+                    _check_word_destination(data, word_text, notebook_id, word_id)
+                w.update(notebook_id=notebook_id, word=word_text)
                 if "definition" in body:
-                    w["definition"] = body["definition"].strip()
+                    w["definition"] = _text(body, "definition")
                 save_words(data)
                 _new_enrichment_candidates.pop(word_id, None)
                 return {"word": w}
@@ -1443,8 +1610,8 @@ def delete_word(word_id: str):
 
 # ─── 导出辅助函数 ─────────────────────────────────────────
 
-def _filter_words(data: dict, q: str, date: str, sort: str = "", letter: str = "") -> list:
-    words = data["words"]
+def _filter_words(data: dict, q: str, date: str, sort: str = "", letter: str = "", notebook_id: str = "") -> list:
+    words = _notebook_words(data, notebook_id)
     if date:
         words = [w for w in words if w["created_at"].startswith(date)]
     if q:
@@ -1588,18 +1755,25 @@ def import_library(body: dict):
     with _write_lock:
         data = load_words()
         known_books = {book["id"] for book in data["notebooks"]}
+        deleted_books = {op["entity_id"] for op in data["_sync"]["operations"].values()
+                         if op["entity"] == "notebook" and op["field"] == "deleted"}
+        restored_books = {}
         for book in clean_books:
             if book["id"] not in known_books:
+                if book["id"] in deleted_books:
+                    original_id = book["id"]
+                    book["id"] = restored_books.setdefault(original_id, uuid.uuid4().hex[:12])
                 data["notebooks"].append(book)
                 known_books.add(book["id"])
         known_words = {word["id"] for word in data["words"]}
         imported = 0
         for word in clean_words:
+            word["notebook_id"] = restored_books.get(word["notebook_id"], word["notebook_id"])
             if word["notebook_id"] not in known_books:
                 raise HTTPException(422, "备份引用了不存在的单词本")
             if word["id"] not in known_words:
                 # Use a new identity for a previously deleted word, retaining its schedule.
-                if any(op["entity_id"] == word["id"] and op["field"] == "deleted"
+                if any(op["entity"] == "word" and op["entity_id"] == word["id"] and op["field"] == "deleted"
                        for op in data["_sync"]["operations"].values()):
                     word["id"] = uuid.uuid4().hex
                 data["words"].append(word)

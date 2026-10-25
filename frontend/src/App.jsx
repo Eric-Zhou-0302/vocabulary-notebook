@@ -12,6 +12,7 @@ import ModelSettings from './pages/ModelSettings'
 import { useGlobalShortcuts } from './useGlobalShortcuts'
 import { useDueCount } from './useDueCount'
 import HelpModal from './components/HelpModal'
+import Notebooks from './pages/Notebooks'
 
 export default function App() {
   const location = useLocation()
@@ -41,6 +42,7 @@ export default function App() {
           <Link to="/" className={location.pathname === '/' ? 'active' : ''}>
             单词列表
           </Link>
+          <Link to="/notebooks" className={location.pathname === '/notebooks' ? 'active' : ''}>单词本</Link>
           <Link to="/review" className={location.pathname === '/review' ? 'active' : ''}>
             复习 {dueCount > 0 && <span className="nav-badge">· {dueCount}</span>}
           </Link>
@@ -55,6 +57,7 @@ export default function App() {
       <main className="app-main">
         <Routes key={location.pathname.startsWith('/word/') || ['/settings', '/sync-settings'].includes(location.pathname) ? location.pathname : cloudVersion}>
           <Route path="/" element={<WordList searchInputRef={searchInputRef} />} />
+          <Route path="/notebooks" element={<Notebooks />} />
           <Route path="/word/new" element={<WordNew />} />
           <Route path="/word/:id" element={<WordDetail />} />
           <Route path="/sync-settings" element={<SyncSettings />} />

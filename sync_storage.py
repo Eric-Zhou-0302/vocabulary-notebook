@@ -81,7 +81,7 @@ def validate_operations(ops):
             raise ValueError("云端变更格式无效")
         field, value = op["field"], op["value"]
         allowed = ({"word", "definition", "phonetic", "example", "created_at", "notebook_id", "deleted", "srs_base", "review"}
-                   if op["entity"] == "word" else {"name", "description", "created_at"})
+                   if op["entity"] == "word" else {"name", "description", "created_at", "deleted"})
         if field not in allowed:
             raise ValueError("不支持的云端字段")
         if field == "review":
@@ -101,7 +101,7 @@ def validate_operations(ops):
                 if any(type(value.get(k, 0)) is not int or value.get(k, 0) < 0 for k in ("reps", "lapses")):
                     raise ValueError("旧复习次数无效")
         elif field == "deleted":
-            if value is not True:
+            if value is not True or (op["entity"] == "notebook" and op["entity_id"] == DEFAULT_BOOK):
                 raise ValueError("删除标记无效")
         elif not isinstance(value, str) or len(value) > 100000:
             raise ValueError("云端文本字段无效")
@@ -151,6 +151,11 @@ def materialize(meta):
             words.append(entity)
     if not any(b["id"] == DEFAULT_BOOK for b in books):
         books.append({"id": DEFAULT_BOOK, "name": "默认单词本", "description": "原词库与日常积累"})
+    # 删除本后，离线设备的旧归属仍可能到达；只折算可见归属，不丢弃单词或历史操作。
+    known_books = {book["id"] for book in books}
+    for word in words:
+        if word["notebook_id"] not in known_books:
+            word["notebook_id"] = DEFAULT_BOOK
     return {"words": sorted(words, key=lambda w: (w["created_at"], w["id"])),
             "notebooks": sorted(books, key=lambda b: (b.get("created_at", ""), b["id"])), "_sync": meta}
 
@@ -199,8 +204,8 @@ def commit(path: Path, data: dict, previous=None):
                 for event in item.get("review_history", []):
                     if event["id"] not in seen:
                         _add(meta, entity, entity_id, "review", event)
-        if entity == "word":
-            for entity_id in old.keys() - new.keys():
+        for entity_id in old.keys() - new.keys():
+            if entity == "word" or entity_id != DEFAULT_BOOK:
                 _add(meta, entity, entity_id, "deleted", True)
     result = materialize(meta)
     atomic_write(path, result)
