@@ -1457,6 +1457,14 @@ def _filter_words(data: dict, q: str, date: str, sort: str = "", letter: str = "
         words = sorted(words, key=lambda w: w["word"].lower())
     elif sort == "alpha_desc":
         words = sorted(words, key=lambda w: w["word"].lower(), reverse=True)
+    elif sort in ("created_desc", "created_asc"):
+        def added_at(word):
+            try:
+                created = _parse_review_time(word.get("created_at", "")).astimezone(timezone.utc)
+            except (ValueError, TypeError, OverflowError):
+                created = datetime.min.replace(tzinfo=timezone.utc)
+            return created, word["id"]
+        words = sorted(words, key=added_at, reverse=sort == "created_desc")
     return words
 
 
