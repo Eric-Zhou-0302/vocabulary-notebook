@@ -1,13 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Routes, Route, Link, useLocation } from 'react-router-dom'
-import CloudStatus from './components/CloudStatus'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import SyncSettings from './pages/Settings'
 import WordList from './pages/WordList'
 import WordNew from './pages/WordNew'
 import WordDetail from './pages/WordDetail'
 import Review from './pages/Review'
-import ThemeToggle from './components/ThemeToggle'
-import ModelStatus from './components/ModelStatus'
+import AppHeader from './components/AppHeader'
 import ModelSettings from './pages/ModelSettings'
 import { useGlobalShortcuts } from './useGlobalShortcuts'
 import { useDueCount } from './useDueCount'
@@ -31,29 +29,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="app-header">
-        <div>
-          <h1 className="app-title">
-            <Link to="/">词汇笔记本</Link>
-          </h1>
-          <ModelStatus />
-        </div>
-        <nav className="app-nav">
-          <Link to="/" className={location.pathname === '/' ? 'active' : ''}>
-            单词列表
-          </Link>
-          <Link to="/notebooks" className={location.pathname === '/notebooks' ? 'active' : ''}>单词本</Link>
-          <Link to="/review" className={location.pathname === '/review' ? 'active' : ''}>
-            复习 {dueCount > 0 && <span className="nav-badge">· {dueCount}</span>}
-          </Link>
-          <Link to="/word/new" className={location.pathname === '/word/new' ? 'active' : ''}>
-            添加单词
-          </Link>
-          <Link to="/settings" className={location.pathname === '/settings' ? 'active' : ''}>模型设置</Link>
-          <CloudStatus />
-          <ThemeToggle />
-        </nav>
-      </header>
+      <AppHeader dueCount={dueCount} onOpenHelp={() => setHelpOpen(true)} />
       <main className="app-main">
         <Routes key={location.pathname.startsWith('/word/') || ['/settings', '/sync-settings'].includes(location.pathname) ? location.pathname : cloudVersion}>
           <Route path="/" element={<WordList searchInputRef={searchInputRef} />} />

@@ -1,19 +1,24 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
+import NavigationIcon from './NavigationIcon'
 
-export default function ModelStatus() {
-  const [health, setHealth] = useState(null) // null = checking
+export default function ModelStatus({ onProblemChange } = {}) {
+  const location = useLocation()
+  const [health, setHealth] = useState(null)
 
   useEffect(() => {
     let aborted = false
+    let requestId = 0
 
     async function check() {
+      const current = ++requestId
       try {
         const res = await fetch('/api/health')
+        if (!res.ok) throw new Error('连接检查失败')
         const data = await res.json()
-        if (!aborted) setHealth(data)
+        if (!aborted && current === requestId) setHealth(data)
       } catch {
-        if (!aborted) setHealth({ provider: 'unknown', status: 'disconnected' })
+        if (!aborted && current === requestId) setHealth({ provider: 'unknown', status: 'disconnected' })
       }
     }
 
@@ -27,19 +32,26 @@ export default function ModelStatus() {
     }
   }, [])
 
-  if (health === null) return null // 首次加载不显示
-
-  const { provider, status } = health
+  const { provider, status } = health || {}
   const connected = status === 'connected'
-  const providerLabel = provider === 'ollama' ? 'Ollama' : provider === 'deepseek' ? 'DeepSeek' : provider
+  const problem = health !== null && !connected
+  const providerLabel = provider === 'ollama' ? 'Ollama' : provider === 'deepseek' ? 'DeepSeek' : '模型服务'
+  const label = health === null ? '检查连接…'
+    : status === 'model_unavailable' ? `模型 ${health.model} 已不可用 · 请重新配置`
+      : connected ? `${providerLabel} 已连接` : `${providerLabel} 无法连接 · 查看设置`
+
+  useEffect(() => { onProblemChange?.(problem) }, [problem, onProblemChange])
 
   return (
     <Link to="/settings"
-      className={`model-status ${connected ? 'on' : 'off'}`}
-      title={connected ? `${providerLabel} 已连接` : `${providerLabel} 离线 — 音标和释义将无法自动补充`}
+      className={`utility-item${problem ? ' has-error' : ''}`}
+      aria-current={location.pathname === '/settings' ? 'page' : undefined}
+      title={problem ? `${label}；自动补全暂不可用` : label}
     >
-      <span className="model-dot" />
-      {status === 'model_unavailable' ? `模型 ${health.model} 已不可用 · 请重新配置` : connected ? `${providerLabel} 已连接` : `${providerLabel} 无法连接 · 查看设置`}
+      <NavigationIcon name="model" />
+      <span className="utility-copy"><span className="utility-title">模型设置</span><span className="utility-description">{label}</span></span>
+      <span className={`utility-status-dot${problem ? ' is-error' : connected ? ' is-connected' : ''}`} aria-hidden="true" />
+      <NavigationIcon name="arrow" />
     </Link>
   )
 }
