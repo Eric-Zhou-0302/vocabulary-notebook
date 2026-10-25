@@ -83,8 +83,12 @@ npm --prefix desktop run dist
 | `desktop/release/` | Electron 应用目录与安装包 |
 | `desktop/package-lock.json` | Electron 与打包工具依赖锁 |
 | `requirements-desktop.txt` | 后端运行依赖及 PyInstaller 打包依赖 |
+| `desktop/resources/` | 打包使用的应用图标、DMG 背景及 NSIS 位图 |
+| `desktop/artwork/` | 图标母版、生成提示词、安装图 SVG 母版与资源清单 |
 
 打包输入仅包含程序代码、前端构建和所需依赖，不包含真实词库、配置或凭据。输出目录、虚拟环境和 `node_modules` 不提交 Git。
+
+在 macOS 上，可在仓库根目录运行 `desktop/node_modules/.bin/electron desktop/artwork/installers/render.cjs` 重新导出安装图，结果位于 `desktop/build/installer-artwork/`。DMG 的 1× / 2× PNG 需同时保留；Windows 页眉和侧栏需转换为 24 位 RGB BMP，再更新 `desktop/resources/` 中的文件。图标与安装图的尺寸、用途见 `desktop/artwork/assets.json`。
 
 ## 检查与平台验收
 

@@ -11,25 +11,42 @@ module.exports = {
   extraResources: [
     { from: 'build/backend/vocab-backend', to: 'backend', filter: ['**/*'] },
     { from: '../LICENSE', to: 'LICENSE.vocabulary-notebook.txt' },
+    { from: 'resources', to: 'branding', filter: ['icon.png', 'icon.ico'] },
   ],
   asar: true,
   npmRebuild: false,
   publish: null,
   artifactName: '${productName}-${version}-${os}-${arch}.${ext}',
   mac: {
+    icon: 'icon.icns',
     category: 'public.app-category.education',
     target: ['dmg', 'zip'],
     identity: '-',
     hardenedRuntime: false,
     notarize: false,
   },
-  win: { target: ['nsis'], requestedExecutionLevel: 'asInvoker' },
+  win: { icon: 'icon.ico', target: ['nsis'], requestedExecutionLevel: 'asInvoker' },
+  dmg: {
+    background: 'background.png',
+    icon: 'icon.icns',
+    iconSize: 80,
+    iconTextSize: 12,
+    contents: [
+      { x: 150, y: 200 },
+      { x: 390, y: 200, type: 'link', path: '/Applications' },
+    ],
+  },
   nsis: {
     oneClick: false,
     perMachine: false,
     allowToChangeInstallationDirectory: true,
     deleteAppDataOnUninstall: false,
     createDesktopShortcut: true,
+    installerIcon: 'icon.ico',
+    uninstallerIcon: 'icon.ico',
+    installerHeader: 'installerHeader.bmp',
+    installerSidebar: 'installerSidebar.bmp',
+    uninstallerSidebar: 'installerSidebar.bmp',
   },
   beforePack: async (context) => {
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'build/backend/target.json'), 'utf8'));

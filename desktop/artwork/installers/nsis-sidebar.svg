@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="164" height="314" viewBox="0 0 164 314" fill="none">
+  <title>Vocabulary Notebook Windows setup sidebar</title>
+  <rect width="164" height="314" fill="#1a1817"/>
+  <path d="M0 0H164V314H138V30H0V0Z" fill="#242220"/>
+  <path d="M23 31H53" stroke="#d4a853" stroke-width="2"/>
+  <!-- 沿用应用展开书本的轮廓，不绘制应用图标底板。 -->
+  <path d="M35 106C51 100 65 100 82 110C99 100 113 100 129 106V173C113 167 99 167 82 177C65 167 51 167 35 173V106Z" stroke="#d4a853" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M82 110V177" stroke="#d4a853" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M45 116C55 113 64 115 72 119M45 128C55 125 64 127 72 131M92 119C100 115 109 113 119 116M92 131C100 127 109 125 119 128" stroke="#d4a853" stroke-opacity=".35" stroke-width="1.2" stroke-linecap="round"/>
+  <text x="82" y="218" fill="#f5f0e8" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10.2" letter-spacing="1.35">VOCABULARY</text>
+  <text x="82" y="236" fill="#f5f0e8" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10.2" letter-spacing="2.3">NOTEBOOK</text>
+  <path d="M67 257H97" stroke="#d4a853" stroke-opacity=".7"/>
+  <path d="M163.5 0V314" stroke="#d4a853" stroke-opacity=".2"/>
+</svg>

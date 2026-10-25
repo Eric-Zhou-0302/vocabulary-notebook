@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="57" viewBox="0 0 150 57" fill="none">
+  <title>Vocabulary Notebook Windows setup header</title>
+  <rect width="150" height="57" fill="#f5f0e8"/>
+  <path d="M12 20C17 18 21 18 26 21C31 18 35 18 40 20V38C35 36 31 36 26 39C21 36 17 36 12 38V20Z" stroke="#d4a853" stroke-width="1.7" stroke-linejoin="round"/>
+  <path d="M26 21V39" stroke="#d4a853" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="50" y="25" fill="#1a1817" font-family="Georgia, 'Times New Roman', serif" font-size="12">Vocabulary</text>
+  <text x="50" y="39" fill="#1a1817" font-family="Georgia, 'Times New Roman', serif" font-size="12">Notebook</text>
+  <path d="M0 56.5H150" stroke="#d4a853" stroke-opacity=".65"/>
+</svg>

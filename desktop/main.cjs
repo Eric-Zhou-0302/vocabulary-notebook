@@ -12,6 +12,7 @@ const { rendererSmoke, waitForSmokePaint } = require('./lib/smoke.cjs')
 
 const smokeTest = process.argv.includes('--smoke-test')
 const root = path.resolve(__dirname, '..')
+const brandingDirectory = app.isPackaged ? path.join(process.resourcesPath, 'branding') : path.join(__dirname, 'resources')
 app.setName(app.isPackaged ? 'Vocabulary Notebook' : 'Vocabulary Notebook Dev')
 let userData = process.env.VOCAB_DESKTOP_USER_DATA_DIR
 if (userData && !path.isAbsolute(userData)) throw new Error('VOCAB_DESKTOP_USER_DATA_DIR 必须是绝对路径')
@@ -122,6 +123,7 @@ async function createWindow() {
   const window = new BrowserWindow({
     width: 1180, height: 820, minWidth: 480, minHeight: 600,
     title: '词汇笔记本', backgroundColor: '#171715', show: false,
+    icon: path.join(brandingDirectory, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences: {
       session: desktopSession, nodeIntegration: false, contextIsolation: true, sandbox: true,
       webSecurity: true, webviewTag: false, allowRunningInsecureContent: false,
@@ -191,6 +193,8 @@ async function runSmokeTest(window) {
 }
 
 async function start() {
+  if (process.platform === 'darwin' && !app.isPackaged) app.dock.setIcon(path.join(brandingDirectory, 'icon.png'))
+  if (process.platform === 'win32') app.setAppUserModelId('net.ericzhou.vocabulary-notebook')
   fs.mkdirSync(dataDirectory, { recursive: true, mode: 0o700 })
   if (smokeTest) {
     if (fs.readdirSync(dataDirectory).length) throw new Error('冒烟验收需要空数据目录，以免读取已有词库或凭据。')
