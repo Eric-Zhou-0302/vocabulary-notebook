@@ -5,9 +5,7 @@
 
 一个本地优先的英文词汇笔记本：记录单词，使用 Ollama 或 DeepSeek 补全音标、中文释义与例句，再通过间隔复习巩固记忆。
 
-![Vocabulary Notebook](assets/vocabulary-notebook-cover.jpg)
-
-当前版本：**1.2.0**。默认分支上的后续改动见 [更新日志](CHANGELOG.md)。
+当前版本：[**1.2.0**](https://github.com/Eric-Zhou-0302/vocabulary-notebook/releases/tag/v1.2.0)。默认分支上的后续改动见 [更新日志](CHANGELOG.md)。
 
 ## 功能
 
@@ -19,6 +17,23 @@
 - **界面与操作**：深浅色主题、手机布局、桌面可收起侧栏，以及搜索、翻卡和评分快捷键。
 
 应用用于个人电脑本地运行。后端只监听 `127.0.0.1:1400`，不提供公网部署或多用户登录功能。跨电脑学习使用同步功能，详见 [Drive 同步指南](docs/DRIVE_SYNC.md)。
+
+## 界面预览
+
+以下为 v1.2.0 真实界面，使用独立演示词库，不包含个人学习数据。
+
+**单词列表** · 搜索、筛选与词汇整理。
+
+![单词列表：展开的侧栏、搜索筛选和词汇卡片](assets/word-list.jpg)
+
+<details>
+<summary>查看复习界面</summary>
+
+翻面查看释义与例句，再按记忆程度安排下一次复习。
+
+![今日复习：释义、例句与四档记忆评分](assets/review.jpg)
+
+</details>
 
 ## 快速开始
 
@@ -67,6 +82,9 @@ test -f config.json || cp config.json.example config.json
 
 桌面宽屏使用侧栏导航，默认展开，可收起为图标；窄屏使用顶部导航。「设置与工具」集中提供模型、同步、主题和快捷键设置。
 
+<details>
+<summary>展开使用指南：单词本、复习、快捷键与导出</summary>
+
 ### 记录与整理
 
 添加页选择单词本、输入单词并保存，补全结果会出现在下方的最近记录中。新词首字母统一大写，其余字符保留；同一本中重复输入会显示已有记录，不重置原有复习进度。
@@ -114,7 +132,14 @@ VOCABULARY_CJK_FONT=/absolute/path/to/font.ttf ./.venv/bin/python app.py
 
 不支持 TTC 字体集合或可变字体。字体不可用、缺少字形或单条词汇超出一页容量时，导出会明确报错，可改用 CSV / JSON。项目不打包第三方字体，使用前请确认字体授权。
 
+</details>
+
 ## 开发与检查
+
+开发约定见 [贡献指南](CONTRIBUTING.md)。修改前端后需构建并提交 `frontend/dist`；完整检查使用 `make check`。
+
+<details>
+<summary>展开开发命令与检查方式</summary>
 
 首次安装开发依赖：
 
@@ -148,7 +173,12 @@ make build   # 更新 frontend/dist
 
 CI 在 push 和 pull request 时运行，并检查提交的前端构建是否最新。自动测试使用临时目录和模拟请求，不等于真实 OAuth 或跨电脑同步验收。更多结构、测试和兼容性约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
+</details>
+
 ## 项目结构
+
+<details>
+<summary>展开项目结构</summary>
 
 ```text
 app.py                    FastAPI 路由、生命周期、补全队列、静态托管
@@ -167,6 +197,8 @@ docs/                     Drive 同步与备份指南
 .github/                  CI、Issue / PR 模板
 ```
 
+</details>
+
 ## 数据与边界
 
 - `words.json` 是本机词库缓存；应用定期生成 `words.json.bak`，迁移旧词库时保留迁移前副本。
@@ -180,3 +212,10 @@ docs/                     Drive 同步与备份指南
 问题反馈请使用 [Issue 模板](https://github.com/Eric-Zhou-0302/vocabulary-notebook/issues/new/choose)。提交改动前阅读 [贡献指南](CONTRIBUTING.md)。
 
 本项目采用 [MIT License](LICENSE)，Copyright © 2026 Eric Zhou。
+
+<details>
+<summary>项目封面</summary>
+
+![Vocabulary Notebook 概念封面](assets/vocabulary-notebook-cover.jpg)
+
+</details>
