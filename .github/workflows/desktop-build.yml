@@ -2,7 +2,7 @@ name: Desktop packages
 
 on:
   push:
-    branches: [main, codex/desktop-packaging]
+    branches: [main]
   workflow_dispatch:
 
 permissions:

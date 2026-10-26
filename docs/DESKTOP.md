@@ -114,7 +114,7 @@ VOCOVE_DESKTOP_PYTHON="$PWD/.venv/bin/python" npm --prefix desktop run smoke
 
 macOS 上通过检查，只说明该架构的应用可运行；Windows 安装、卸载和应用运行需要在 Windows 上分别验证。未完成的项目应记录为未验收，不能以生成安装包代替功能验证。
 
-`.github/workflows/desktop-build.yml` 在推送到 `main` 或 `codex/desktop-packaging` 时自动运行，也可在 GitHub Actions 的 **Desktop packages** 工作流中手动选择分支运行；在 macOS Apple Silicon、macOS Intel 和 Windows x64 上分别检查、打包和运行桌面冒烟验收。Windows 还会在 GitHub 托管 runner 的独立临时目录中静默运行 NSIS 安装包，确认安装后的应用通过冒烟检查，再等待静默卸载完成，检查安装文件及注册表项已移除；成功或失败后都会清理本次临时目录。安装验收脚本拒绝在本机运行。同一分支的新运行会取消尚未完成的旧运行。工作流仅上传构建文件供下载，不自动发布 GitHub Release；提交、推送或运行远程工作流需按项目权限约定处理。
+`.github/workflows/desktop-build.yml` 在推送到 `main` 时自动运行，也可在 GitHub Actions 的 **Desktop packages** 工作流中手动选择分支运行；在 macOS Apple Silicon、macOS Intel 和 Windows x64 上分别检查、打包和运行桌面冒烟验收。Windows 还会在 GitHub 托管 runner 的独立临时目录中静默运行 NSIS 安装包，确认安装后的应用通过冒烟检查，再等待静默卸载完成，检查安装文件及注册表项已移除；成功或失败后都会清理本次临时目录。安装验收脚本拒绝在本机运行。同一分支的新运行会取消尚未完成的旧运行。工作流仅上传构建文件供下载，不自动发布 GitHub Release；提交、推送或运行远程工作流需按项目权限约定处理。
 
 也可按上面的命令在 Windows 或另一台 Mac 上本地构建。
 
