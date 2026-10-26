@@ -7,7 +7,7 @@
 
 一个本地优先的英文词汇学习应用：记录单词，使用 Ollama 或 DeepSeek 补全音标、中文释义与例句，再通过间隔复习巩固记忆。
 
-当前版本：[**1.2.0**](https://github.com/Eric-Zhou-0302/vocove/releases/tag/v1.2.0)。默认分支上的后续改动见 [更新日志](CHANGELOG.md)。
+当前版本：[**1.3.0-beta**](https://github.com/Eric-Zhou-0302/vocove/releases/tag/v1.3.0-beta)（预发布）。默认分支上的后续改动见 [更新日志](CHANGELOG.md)。
 
 ## 功能
 
@@ -24,12 +24,13 @@
 
 桌面版采用 Electron，内置运行环境，无需安装 Python、Node.js 或使用命令行。
 
-[下载应用 →](https://github.com/Eric-Zhou-0302/vocove/releases)
+[下载 v1.3.0-beta →](https://github.com/Eric-Zhou-0302/vocove/releases/tag/v1.3.0-beta)
 
 | 系统 | 安装方式 |
 | --- | --- |
-| macOS | 选择与芯片匹配的安装包（Apple Silicon / Intel），打开 `.dmg`，将应用拖入「应用程序」 |
-| Windows | 下载 `.exe` 安装包，双击并按提示完成安装 |
+| macOS Apple Silicon | 下载 arm64 的 `.dmg`，将应用拖入「应用程序」 |
+| macOS Intel | 下载 x64 的 `.dmg`，将应用拖入「应用程序」 |
+| Windows x64 | 下载 `.exe` 安装包，双击并按提示完成安装 |
 
 安装后直接打开 **Vocove**，在「设置与工具 → 模型设置」配置 Ollama 或 DeepSeek，即可开始记录和复习单词。
 
