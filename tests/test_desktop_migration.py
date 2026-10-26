@@ -1,4 +1,5 @@
 """品牌迁移仅使用合成资料，验证原目录保留、并发锁和失败后的可重试性。"""
+import errno
 import json
 import os
 from pathlib import Path
@@ -7,6 +8,7 @@ import stat
 import subprocess
 import sys
 import threading
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -36,6 +38,53 @@ def contents(directory):
 
 def migration_lock_file(destination):
     return destination.parent / f".{destination.name}.migration.lock"
+
+
+def wait_for_lock_release(lock_files, timeout=5):
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            return [path.read_bytes() for path in lock_files]
+        except PermissionError as exc:
+            remaining = deadline - time.monotonic()
+            if sys.platform != "win32" or exc.errno != errno.EACCES or remaining <= 0:
+                raise
+            # Windows venv redirector 退出不等于其子进程及 OS 字节锁均已回收。
+            # 只等待两个已知锁的可读条件；超时仍失败，不重试迁移或其他异常。
+            time.sleep(min(0.01, remaining))
+
+
+def test_lock_release_wait_observes_release_within_deadline(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    now = [0.0]
+    monkeypatch.setattr(time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(time, "sleep", lambda delay: now.__setitem__(0, now[0] + delay))
+
+    def read_lock():
+        if now[0] < 0.01:
+            raise PermissionError(errno.EACCES, "synthetic held byte lock")
+        return b"0"
+
+    lock = SimpleNamespace(read_bytes=read_lock)
+    assert wait_for_lock_release([lock], timeout=0.02) == [b"0"]
+    assert now[0] == 0.01
+
+
+@pytest.mark.parametrize("platform,error_number", [
+    ("win32", errno.EACCES), ("win32", errno.EPERM), ("darwin", errno.EACCES),
+])
+def test_lock_release_wait_stops_at_deadline_or_unrelated_error(monkeypatch, platform, error_number):
+    monkeypatch.setattr(sys, "platform", platform)
+    now = [0.0]
+    monkeypatch.setattr(time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(time, "sleep", lambda delay: now.__setitem__(0, now[0] + delay))
+
+    def read_lock():
+        raise PermissionError(error_number, "synthetic denied read")
+
+    with pytest.raises(PermissionError):
+        wait_for_lock_release([SimpleNamespace(read_bytes=read_lock)], timeout=0.02)
+    assert now[0] == (0.02 if platform == "win32" and error_number == errno.EACCES else 0)
 
 
 def test_copy_preserves_source_and_complete_profile_except_running_locks(profile):
@@ -136,7 +185,9 @@ migration.migrate_user_data(sys.argv[1], sys.argv[2])
         process.terminate()
         process.wait(timeout=10)
         assert not destination.exists()
-        assert migration_lock_file(destination).read_bytes() == b"0"
+        assert wait_for_lock_release([
+            migration_lock_file(destination), source / "data" / "words.json.lock",
+        ]) == [b"0", b"0"]
         assert migration.migrate_user_data(source, destination) == "migrated"
         assert contents(source) == before
         assert contents(abandoned) == {"partial": b"synthetic interrupted copy"}
