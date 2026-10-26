@@ -3,12 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark light" />
+  <script>
+    try {
+      const saved = localStorage.getItem('theme')
+      const preference = ['light', 'dark'].includes(saved) ? saved : 'system'
+      const dark = preference === 'dark' || (preference === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    } catch {
+      document.documentElement.dataset.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+    }
+  </script>
   <title>Vocove</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Noto+Serif+SC:wght@400;500;700&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="/assets/index-B_lpbQWR.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CmPzc_e-.css">
+  <script type="module" crossorigin src="/assets/index-BoHmGaGK.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-_URLnKsP.css">
 </head>
 <body>
   <div id="root"></div>
