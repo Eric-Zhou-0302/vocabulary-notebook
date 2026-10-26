@@ -70,6 +70,7 @@ VOCOVE_DESKTOP_PYTHON="$PWD/.venv-desktop/bin/python" npm --prefix desktop run d
 
 ```powershell
 py -3.11 -m venv .venv-desktop
+$env:PYTHONUTF8 = '1'
 .\.venv-desktop\Scripts\python.exe -m pip install -r requirements-desktop.txt
 npm --prefix frontend ci
 npm --prefix desktop ci
