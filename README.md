@@ -5,68 +5,52 @@
 [![CI](https://github.com/Eric-Zhou-0302/vocove/actions/workflows/ci.yml/badge.svg)](https://github.com/Eric-Zhou-0302/vocove/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-一个本地优先的英文词汇学习应用：记录单词，使用 Ollama 或 DeepSeek 补全音标、中文释义与例句，再通过间隔复习巩固记忆。
+Vocove 是一个本地优先的英文词汇学习应用。你可以按主题整理单词，使用 Ollama 或 DeepSeek 补全音标、中文释义和例句，再通过间隔复习巩固记忆。
 
-当前版本：[**1.3.0-beta**](https://github.com/Eric-Zhou-0302/vocove/releases/tag/v1.3.0-beta)（预发布）。默认分支上的后续改动见 [更新日志](CHANGELOG.md)。
+当前版本：[**1.3.0**](https://github.com/Eric-Zhou-0302/vocove/releases/tag/v1.3.0)。默认分支上的后续改动见[更新日志](CHANGELOG.md)。
 
-## 功能
+## 功能亮点
 
-- **单词与单词本**：按主题管理词汇；同词可加入多本，每本独立保存内容与复习进度。
-- **AI 补全**：支持本地 Ollama 和 DeepSeek API，提供任务进度、失败提示与缺失内容重试。
-- **间隔复习**：四档记忆评分、每日新词额度、下次复习间隔预览；也可按字母或随机顺序只读翻卡。
-- **查找与导出**：搜索、日期/首字母筛选、添加时间排序，以及 PDF、CSV、JSON 导出。
-- **同步与备份**：可选 Google Drive 桌面文件夹或 API 直连；支持完整学习历史备份和合并导入。
-- **界面与操作**：深浅色主题、手机布局、桌面可收起侧栏，以及搜索、翻卡和评分快捷键。
+- **单词本管理**：同词可加入多个单词本，每本独立保存内容与复习进度。
+- **AI 内容补全**：支持本地 Ollama 和 DeepSeek API，显示任务进度，支持失败重试。
+- **间隔复习**：四档记忆评分、每日新词额度和复习间隔预览，也可按字母或随机顺序翻卡。
+- **查找与导出**：支持搜索、筛选、排序，以及 PDF、CSV、JSON 导出。
+- **同步与备份**：可选 Google Drive 文件夹或 API 直连，支持完整学习历史备份与合并导入。
+- **桌面与移动端体验**：提供深浅色主题、响应式布局、可收起侧栏和键盘快捷键。
 
-应用在个人电脑本地运行，支持桌面应用和网页两种使用方式。跨电脑学习可通过 Google Drive 同步，详见 [Drive 同步指南](docs/DRIVE_SYNC.md)。
+Vocove 提供桌面应用和网页两种使用方式。学习数据保存在本机；跨电脑使用可通过 Google Drive 同步，详见 [Drive 同步指南](docs/DRIVE_SYNC.md)。
 
-## macOS / Windows 桌面版
+## 桌面版：下载即用
 
-桌面版采用 Electron，内置运行环境，无需安装 Python、Node.js 或使用命令行。
+桌面版基于 Electron，内置运行环境，无需安装 Python、Node.js 或使用命令行。
 
-[下载 v1.3.0-beta →](https://github.com/Eric-Zhou-0302/vocove/releases/tag/v1.3.0-beta)
+[下载 Vocove 1.3.0 →](https://github.com/Eric-Zhou-0302/vocove/releases/tag/v1.3.0)
 
 | 系统 | 安装方式 |
 | --- | --- |
 | macOS Apple Silicon | 下载 arm64 的 `.dmg`，将应用拖入「应用程序」 |
 | macOS Intel | 下载 x64 的 `.dmg`，将应用拖入「应用程序」 |
-| Windows x64 | 下载 `.exe` 安装包，双击并按提示完成安装 |
+| Windows x64 | 下载 `.exe` 安装包，双击并按提示安装 |
 
-**macOS 首次打开**：若提示 Apple 无法验证应用，请点击「完成」，进入「系统设置 → 隐私与安全性 → 安全性」，点击「仍要打开」，按提示确认「打开」即可。
+**macOS 首次打开**：若提示 Apple 无法验证应用，点击「完成」，进入「系统设置 → 隐私与安全性 → 安全性」，点击「仍要打开」并确认。
 
-安装后直接打开 **Vocove**，在「设置与工具 → 模型设置」配置 Ollama 或 DeepSeek，即可开始记录和复习单词。
+> Q：为什么需要这个？
+> A：当前安装包未进行 Apple Developer ID 签名和公证。
 
-**应用内更新（当前源码已实现，尚未发布）**：新版将支持从 macOS 的「Vocove → 检查更新」或 Windows 的「帮助 → 检查更新」获取新版本，也会在启动后检查一次。下载和安装均需确认；Windows 打开安装向导，macOS 下载并校验安装包后，仍需拖入「应用程序」替换。现有 v1.3.0-beta 安装版须先手动升级一次，才能获得更新入口。具体行为与发布要求见 [桌面版指南](docs/DESKTOP.md#安装与更新)。
+安装后打开 **Vocove**，在「设置与工具 → 模型设置」中配置 Ollama 或 DeepSeek，即可开始记录和复习单词。
 
-## 界面预览
+> **应用内更新**：从 macOS「Vocove → 检查更新」或 Windows「帮助 → 检查更新」获取新版本。
 
-以下为 v1.2.0 真实界面，使用独立演示词库，不包含个人学习数据。
+## 网页版：从源码运行
 
-**单词列表** · 搜索、筛选与词汇整理。
-
-![单词列表：展开的侧栏、搜索筛选和词汇卡片](assets/word-list.jpg)
-
-<details>
-<summary>查看复习界面</summary>
-
-翻面查看释义与例句，再按记忆程度安排下一次复习。
-
-![今日复习：释义、例句与四档记忆评分](assets/review.jpg)
-
-</details>
-
-## 网页版快速开始
-
-### 环境
+### 环境要求
 
 - Python **3.11+**；CI 覆盖 3.11 和 3.12。
-- 使用已提交的前端构建文件时，不需要 Node.js。
-- 修改前端需 Node.js **22.13+（22.x）或 24+** 及 npm。开发与检查使用项目本地依赖。
-- 以下命令适用于 macOS / Linux shell。PDF 中文导出需要可用的 Unicode 字体，见下文。
+- 直接使用已提交的前端构建文件时，无需 Node.js。
+- 修改前端需要 Node.js **22.13+（22.x）或 24+** 及 npm。
+- 以下命令适用于 macOS / Linux shell。
 
-### 安装与运行
-
-以下命令中的 `python` 需指向 Python 3.11 或更高版本；若本机命令为 `python3`，请相应替换。
+### 安装并启动
 
 ```bash
 git clone https://github.com/Eric-Zhou-0302/vocove.git
@@ -78,167 +62,105 @@ test -f config.json || cp config.json.example config.json
 python app.py
 ```
 
-打开 [http://localhost:1400](http://localhost:1400)。`python app.py` 会托管 `frontend/dist`；不需要另外运行前端服务器或启动脚本。
+打开 [http://localhost:1400](http://localhost:1400)。`python app.py` 会直接托管 `frontend/dist`，无需另外启动前端服务器。
 
-通过「设置与工具 → 模型设置」配置补全服务。没有连接模型时，仍可浏览已有词库和复习。
+### 配置补全服务
 
-### 配置模型
+- **Ollama**：启动本机或自托管的 Ollama 服务，在「设置与工具 → 模型设置」中填写服务地址和已安装的模型名称。默认地址为 `http://localhost:11434/api/generate`。
+- **DeepSeek**：在 [DeepSeek 开放平台](https://platform.deepseek.com/api_keys)创建 API Key，填写后刷新模型列表、选择模型并保存。模型列表由官方接口获取。
 
-**Ollama**：先启动本机或自托管的 Ollama 服务，在模型设置页填写服务地址和实际已安装的模型名称。默认地址为 `http://localhost:11434/api/generate`。
+网页保存配置后立即生效；已有 Key 不会回传浏览器，留空会保留原值。若直接修改 `config.json`，需重启后端。配置结构见 [config.json.example](config.json.example)。
 
-**DeepSeek**：在 [DeepSeek 开放平台](https://platform.deepseek.com/api_keys)创建 API Key，填写后刷新模型列表、选择模型并保存。模型列表由官方接口获取，不在项目中写死。
+未连接模型时，仍可浏览已有词库和复习。可选的拼写校验需要先安装系统 Enchant 库及 `en_US` 词典，再运行 `python -m pip install -r requirements-spellcheck.txt`；详见 [PyEnchant 安装说明](https://pyenchant.github.io/pyenchant/install.html)。
 
-网页保存配置后立即生效。已有 Key 不会回传浏览器，留空保留原值。若直接修改 `config.json`，需重启后端。配置结构见 [config.json.example](config.json.example)。
-
-可选启用本机词典拼写校验：确认系统已有 Enchant 库及 `en_US` 词典后，运行 `python -m pip install -r requirements-spellcheck.txt`。系统要求见 [PyEnchant 安装说明](https://pyenchant.github.io/pyenchant/install.html)。未安装时跳过词典检查，例句中文字符和释义格式检查仍然执行。
-
-旧版用户升级前请先备份数据，迁移与回退说明见 [Drive 同步指南](docs/DRIVE_SYNC.md#旧词库备份与升级)。
+旧版用户升级前请先备份数据，迁移与回退说明见[旧词库备份与升级](docs/DRIVE_SYNC.md#旧词库备份与升级)。
 
 ## 日常使用
 
-桌面宽屏使用侧栏导航，默认展开，可收起为图标；窄屏使用顶部导航。「设置与工具」集中提供模型、同步、主题和快捷键设置。外观默认跟随系统，也可手动选择浅色或深色；已有的手动选择会继续保留。
-
-<details>
-<summary>展开使用指南：单词本、复习、快捷键与导出</summary>
-
 ### 记录与整理
 
-添加页选择单词本、输入单词并保存，补全结果会出现在下方的最近记录中。新词首字母统一大写，其余字符保留；同一本中重复输入会显示已有记录，不重置原有复习进度。
+添加单词时选择单词本并保存，补全结果会显示在最近记录中。补全期间可继续使用应用；网络、授权或模型响应异常时，记录会保留供重试，也可在详情页手动编辑。
 
-补全期间可继续使用应用。网络、授权或模型响应异常会保留记录供重试；只有明确判定无效且未被用户修改或复习的新空词条，才会自动移除。详情页可手动编辑。
+「整理单词」支持跨本加入或移动：加入会保留原词，目标本从新词开始复习；移动会保留复习进度，目标本已有同词时停止整批操作，避免覆盖。
 
-在单词列表中使用「整理单词」：
+### 复习与快捷键
 
-- **加入单词本**：保留原词，目标本从新词开始复习，跳过已有同词。
-- **移动到此本**：保留复习进度；目标本存在同词时停止整批操作，避免覆盖。
+「今日复习」根据到期记录和每日额度组成队列。先回忆再翻面评分，选择「重来」的卡片会回到本轮队尾。默认每天引入 20 个新词，各本共用额度，可通过 `config.json` 的 `srs.daily_new_limit` 修改。
 
-同一本内按拼写忽略大小写去重；跨本允许同词。只能删除空单词本，默认单词本始终保留。排序选择保存在当前浏览器中，筛选范围同时用于导出。
+「全部单词」按 A–Z 或随机顺序翻阅，不提交评分、不消耗新词额度。
 
-### 复习
+| 快捷键 | 用途 |
+| --- | --- |
+| `/` | 返回单词列表并选中搜索框 |
+| `N` | 打开添加单词 |
+| `?` | 打开或关闭帮助 |
+| `Space` / `Enter` | 复习时显示答案 |
+| `1` / `2` / `3` / `4` | 显示答案后选择重来、困难、良好、简单 |
+| `←` / `→` | 全部单词模式中返回上一张，或显示答案后进入下一张 |
+| `Esc` | 清空搜索、关闭弹窗或菜单，具体行为取决于当前位置 |
 
-「今日复习」根据到期记录和每日额度组成队列。先回忆再翻面，按记忆程度评分；选择“重来”的卡片会回到本轮队尾。默认每天引入 20 个新词，各本共用额度，可通过 `config.json` 的 `srs.daily_new_limit` 修改。
-
-「全部单词」按 A–Z 或随机顺序翻阅，不提交评分、不消耗新词额度。该模式只显示当前范围内有释义的词条，单次最多读取 10,000 条。
-
-| 适用位置 | 快捷键 | 操作与条件 |
-| --- | --- | --- |
-| 各页面 | `/` | 返回单词列表并选中搜索框；沿用页面已选择的单词本范围（如有） |
-| 各页面 | `N` | 打开添加单词，沿用页面已选择的单词本范围（如有） |
-| 各页面 | `?` | 打开帮助，再按一次关闭；通常通过 `Shift` + `/` 输入 |
-| 搜索框内 | `Esc` | 有搜索内容时清空；为空时移出焦点 |
-| 今日复习 / 全部单词 | `Space` 或 `Enter` | 显示当前卡片答案 |
-| 今日复习 | `1`、`2`、`3`、`4` | 显示答案后，分别选择重来、困难、良好、简单；保存中不重复评分 |
-| 全部单词 | `←` | 返回上一张（已有上一张时），重新回忆答案 |
-| 全部单词 | `→` | 显示答案后进入下一张；最后一张完成本轮 |
-| 添加单词输入框 / 编辑输入框 | `Enter` | 保存当前表单；输入法确认候选时不保存 |
-| 添加单词输入框 | `Esc` | 返回上一页；输入法取消候选时不返回 |
-| 帮助 / 编辑弹窗 | `Esc` | 关闭弹窗；编辑保存中不能关闭 |
-| 设置 / 导出菜单 | `Esc` | 关闭已打开的菜单，焦点回到入口 |
-
-页面快捷键在输入框、下拉框、可编辑区域和其他弹窗中暂停，输入时只按上表对应的规则操作。复习时，焦点在卡片、评分或翻页按钮上仍可使用数字 / 方向键；导航链接与其他控件保留原有行为。按住快捷键不会连续触发，`Ctrl` / `Cmd` / `Alt` 组合键仍交给浏览器。
-
-可用 `Tab` / `Shift` + `Tab` 切换焦点，再用 `Enter` 激活链接，或用 `Enter` / `Space` 激活按钮。帮助弹窗会限制焦点在弹窗内，关闭后返回原位置。
+快捷键会在输入框、下拉框和其他弹窗中暂停或按场景处理；输入法候选、修饰键组合和长按不会被误触。完整规则可在应用内按 `?` 查看。
 
 ### 导出与完整备份
 
 | 入口 | 内容与用途 |
 | --- | --- |
-| 单词列表 → PDF / CSV / JSON | 当前筛选下的词汇内容，适合打印、表格整理与二次处理 |
-| 同步与备份 → 下载完整备份 | 所有单词本、字段操作、删除标记及评分事件，适合迁移与恢复 |
+| 单词列表 → PDF / CSV / JSON | 导出当前筛选下的词汇内容，适合打印、整理与二次处理 |
+| 同步与备份 → 下载完整备份 | 保存所有单词本、字段操作、删除标记及评分事件，适合迁移与恢复 |
 | 同步与备份 → 导入备份 | 合并导入完整备份或旧词库，不覆盖整个现有词库 |
 
 **普通列表导出不能替代完整学习历史备份。**
 
-PDF 使用 `fpdf2` 直接生成，不依赖 HTML 模板。macOS 默认尝试系统 Arial Unicode 字体；其他环境可指定覆盖所需中文、音标的静态 TTF / OTF 字体：
+PDF 中文和音标导出需要包含相应字形的静态 TTF / OTF 字体。macOS 默认尝试系统 Arial Unicode 字体，其他环境可手动指定：
 
 ```bash
 VOCOVE_CJK_FONT=/absolute/path/to/font.ttf python app.py
 ```
 
-不支持 TTC 字体集合或可变字体。字体不可用、缺少字形或单条词汇超出一页容量时，导出会明确报错，可改用 CSV / JSON。项目不打包第三方字体，使用前请确认字体授权。
+不支持 TTC 字体集合或可变字体。字体不可用、缺少字形或单条词汇超出一页容量时会明确报错，可改用 CSV / JSON。项目不打包第三方字体，使用前请确认字体授权。
 
-</details>
+## 开发与贡献
 
-## 开发与检查
-
-开发约定见 [贡献指南](CONTRIBUTING.md)。修改前端后需构建并提交 `frontend/dist`；完整检查使用 `make check`。
-
-<details>
-<summary>展开开发命令与检查方式</summary>
-
-首次安装开发依赖：
+开发环境、等价命令和兼容性约定见[贡献指南](CONTRIBUTING.md)。常用检查命令：
 
 ```bash
-./.venv/bin/python -m pip install -r requirements-dev.txt
-npm --prefix frontend ci
-npm --prefix desktop ci --ignore-scripts
-```
-
-普通检查只需桌面逻辑测试依赖，可跳过安装脚本。需要启动或打包桌面应用时，先运行 `npm --prefix desktop ci` 完整安装桌面依赖。
-
-需要热更新时，在两个终端分别运行：
-
-```bash
-# 后端
-./.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 1400 --no-proxy-headers --timeout-graceful-shutdown 5 --reload
-```
-
-```bash
-# 前端
-npm --prefix frontend run dev -- --host 127.0.0.1
-```
-
-开发页面为 [http://localhost:5173](http://localhost:5173)。不要同时启动两个后端操作同一份词库；实例锁会拒绝重复启动。
-
-```bash
-make check    # Python/JS 静态检查、前后端及桌面测试、前端构建
+make check   # 静态检查、前后端及桌面测试、前端构建
 make lint    # 仅静态检查
 make test    # 后端、前端与桌面测试
 make build   # 更新 frontend/dist
 ```
 
-没有 `make` 时，使用 [贡献指南](CONTRIBUTING.md) 中的等价命令。**修改前端后必须构建并一并提交 `frontend/dist`**，否则 `python app.py` 仍会显示旧页面。
-
-CI 在 push 和 pull request 时运行，并检查提交的前端构建是否最新。自动测试使用临时目录和模拟请求，不等于真实 OAuth 或跨电脑同步验收。更多结构、测试和兼容性约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-</details>
-
-## 项目结构
+**修改前端后必须构建并一并提交 `frontend/dist`**，否则 `python app.py` 仍会显示旧页面。CI 会检查提交的前端构建是否最新。
 
 <details>
-<summary>展开项目结构</summary>
+<summary>开发模式与热更新</summary>
 
-```text
-app.py                    FastAPI 路由、生命周期、补全队列、静态托管
-config.py                 配置校验与原子保存
-pdf_export.py             PDF 排版、字体选择与字形校验
-fsrs.py                   复习调度
-sync_storage.py           操作历史、合并与本地原子写入
-drive_sync.py             Drive 文件夹 / OAuth 同步
-instance_lock.py          同一词库的进程锁
-event_broadcast.py        SSE 多订阅者事件广播
-desktop_backend.py        桌面后端启动、独立数据目录、进程生命周期
-desktop/                  Electron 入口、平台打包与桌面测试
-frontend/src/             React 页面、组件、Hooks 与样式
-frontend/test/            Node 原生前端逻辑测试
-frontend/dist/            FastAPI 直接托管的构建文件
-tests/                    后端回归测试与隔离客户端
-docs/                     Drive 同步、桌面开发与打包指南
-.github/                  CI、Issue / PR 模板
+安装开发依赖：
+
+```bash
+python -m pip install -r requirements-dev.txt
+npm --prefix frontend ci
+npm --prefix desktop ci --ignore-scripts
 ```
+
+需要热更新时，在两个终端分别运行：
+
+```bash
+./.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 1400 --no-proxy-headers --timeout-graceful-shutdown 5 --reload
+```
+
+```bash
+npm --prefix frontend run dev -- --host 127.0.0.1
+```
+
+开发页面为 [http://localhost:5173](http://localhost:5173)。不要同时启动两个后端操作同一份词库；实例锁会拒绝重复启动。
 
 </details>
 
-## 数据与边界
+自动测试使用临时目录和模拟外部请求，不等于真实 OAuth、模型调用或跨电脑同步验收。
 
-- `words.json` 是本机词库缓存；应用定期生成 `words.json.bak`，迁移旧词库时保留迁移前副本。
-- `config.json`、`.secrets`、词库与备份均被 Git 忽略。不要将它们放进 Issue、PR 或公开日志。
-- Ollama 可处理本地补全；DeepSeek 模式会发送待补全单词和上下文到其 API。网页字体默认从 Google Fonts 加载，网络不可用时回退系统字体。
-- Drive 同步仅在用户主动连接后启用，配置与凭据保留在各自电脑。操作日志不会自动清空，以支持离线设备重新合并。
-- PDF 字体要求见上文；Google 授权和跨设备传输的配置与限制见 [Drive 指南](docs/DRIVE_SYNC.md)。
+## 反馈与许可
 
-## 贡献与许可
-
-问题反馈请使用 [Issue 模板](https://github.com/Eric-Zhou-0302/vocove/issues/new/choose)。提交改动前阅读 [贡献指南](CONTRIBUTING.md)。
+问题反馈请使用 [Issue 模板](https://github.com/Eric-Zhou-0302/vocove/issues/new/choose)，提交改动前请阅读[贡献指南](CONTRIBUTING.md)。
 
 本项目采用 [MIT License](LICENSE)，Copyright © 2026 Eric Zhou。

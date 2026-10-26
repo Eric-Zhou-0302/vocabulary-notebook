@@ -57,13 +57,13 @@ node --test desktop/test/*.test.cjs
 
 ### 桌面版开发与检查
 
-Electron 入口、Python 后端打包和安装包构建见 [桌面版指南](docs/DESKTOP.md)。桌面依赖单独位于 `desktop/package.json` 与 `requirements-desktop.txt`，使用项目内的 `.venv-desktop`，不要求修改网页开发环境。
+桌面依赖单独位于 `desktop/package.json` 与 `requirements-desktop.txt`，使用项目内的 `.venv-desktop`，不要求修改网页开发环境。
 
 修改桌面代码后，除相关后端回归测试外，运行 `npm --prefix desktop test`；打包前运行前端构建。安装包必须在目标操作系统和架构上构建、启动与退出验证，不能将 macOS 检查结果视为 Windows 验收。自动验证使用临时 `VOCOVE_DESKTOP_USER_DATA_DIR`，不得指向日常桌面数据或仓库真实词库。
 
 `desktop-build.yml` 在推送到 `main` 时运行，也支持手动触发；它生成各平台构建产物，不自动创建 Release 或发布安装包。更改分发或迁移行为时，应单独说明其对本机数据和发布流程的影响。
 
-更新逻辑测试使用模拟版本源、下载响应、对话框及安装回调，不访问真实词库，也不启动安装程序。源码和冒烟模式不联网检查更新；实际升级链路仍需分别在 Windows 与各 macOS 架构上验收。发布文件清单与预发布标记要求见 [桌面版指南](docs/DESKTOP.md#更新分发)。
+更新逻辑测试使用模拟版本源、下载响应、对话框及安装回调，不访问真实词库，也不启动安装程序。源码和冒烟模式不联网检查更新；实际升级链路仍需分别在 Windows 与各 macOS 架构上验收。
 
 ## 代码结构与边界
 
