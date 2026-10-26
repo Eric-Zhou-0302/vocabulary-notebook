@@ -18,7 +18,20 @@
 - **同步与备份**：可选 Google Drive 桌面文件夹或 API 直连；支持完整学习历史备份和合并导入。
 - **界面与操作**：深浅色主题、手机布局、桌面可收起侧栏，以及搜索、翻卡和评分快捷键。
 
-应用用于个人电脑本地运行。后端只监听 `127.0.0.1:1400`，不提供公网部署或多用户登录功能。跨电脑学习使用同步功能，详见 [Drive 同步指南](docs/DRIVE_SYNC.md)。
+应用在个人电脑本地运行，支持桌面应用和网页两种使用方式。跨电脑学习可通过 Google Drive 同步，详见 [Drive 同步指南](docs/DRIVE_SYNC.md)。
+
+## macOS / Windows 桌面版
+
+桌面版采用 Electron，内置运行环境，无需安装 Python、Node.js 或使用命令行。
+
+[下载应用 →](https://github.com/Eric-Zhou-0302/vocove/releases)
+
+| 系统 | 安装方式 |
+| --- | --- |
+| macOS | 选择与芯片匹配的安装包（Apple Silicon / Intel），打开 `.dmg`，将应用拖入「应用程序」 |
+| Windows | 下载 `.exe` 安装包，双击并按提示完成安装 |
+
+安装后直接打开 **Vocove**，在「设置与工具 → 模型设置」配置 Ollama 或 DeepSeek，即可开始记录和复习单词。
 
 ## 界面预览
 
@@ -37,7 +50,7 @@
 
 </details>
 
-## 快速开始
+## 网页版快速开始
 
 ### 环境
 
@@ -144,7 +157,10 @@ VOCOVE_CJK_FONT=/absolute/path/to/font.ttf python app.py
 ```bash
 ./.venv/bin/python -m pip install -r requirements-dev.txt
 npm --prefix frontend ci
+npm --prefix desktop ci --ignore-scripts
 ```
+
+普通检查只需桌面逻辑测试依赖，可跳过安装脚本。需要启动或打包桌面应用时，先运行 `npm --prefix desktop ci` 完整安装桌面依赖。
 
 需要热更新时，在两个终端分别运行：
 
@@ -161,9 +177,9 @@ npm --prefix frontend run dev -- --host 127.0.0.1
 开发页面为 [http://localhost:5173](http://localhost:5173)。不要同时启动两个后端操作同一份词库；实例锁会拒绝重复启动。
 
 ```bash
-make check    # Python/JS 静态检查、前后端测试、前端构建
+make check    # Python/JS 静态检查、前后端及桌面测试、前端构建
 make lint    # 仅静态检查
-make test    # 仅测试
+make test    # 后端、前端与桌面测试
 make build   # 更新 frontend/dist
 ```
 
@@ -187,11 +203,13 @@ sync_storage.py           操作历史、合并与本地原子写入
 drive_sync.py             Drive 文件夹 / OAuth 同步
 instance_lock.py          同一词库的进程锁
 event_broadcast.py        SSE 多订阅者事件广播
+desktop_backend.py        桌面后端启动、独立数据目录、进程生命周期
+desktop/                  Electron 入口、平台打包与桌面测试
 frontend/src/             React 页面、组件、Hooks 与样式
 frontend/test/            Node 原生前端逻辑测试
 frontend/dist/            FastAPI 直接托管的构建文件
 tests/                    后端回归测试与隔离客户端
-docs/                     Drive 同步与备份指南
+docs/                     Drive 同步、桌面开发与打包指南
 .github/                  CI、Issue / PR 模板
 ```
 

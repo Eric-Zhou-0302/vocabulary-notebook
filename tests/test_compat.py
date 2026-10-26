@@ -6,6 +6,7 @@ from compat import getenv
 
 @pytest.mark.parametrize("current,previous", [
     ("VOCOVE_DATA_FILE", "VOCAB_DATA_FILE"),
+    ("VOCOVE_DESKTOP_TOKEN", "VOCAB_DESKTOP_TOKEN"),
     ("VOCOVE_CJK_FONT", "VOCABULARY_CJK_FONT"),
 ])
 def test_previous_environment_is_used_only_when_new_name_is_absent(monkeypatch, current, previous):
