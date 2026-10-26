@@ -1,3 +1,5 @@
+![Vocabulary Notebook 概念封面](assets/vocabulary-notebook-cover.jpg)
+
 # Vocabulary Notebook
 
 [![CI](https://github.com/Eric-Zhou-0302/vocabulary-notebook/actions/workflows/ci.yml/badge.svg)](https://github.com/Eric-Zhou-0302/vocabulary-notebook/actions/workflows/ci.yml)
@@ -46,16 +48,16 @@
 
 ### 安装与运行
 
+以下命令中的 `python` 需指向 Python 3.11 或更高版本；若本机命令为 `python3`，请相应替换。
+
 ```bash
 git clone https://github.com/Eric-Zhou-0302/vocabulary-notebook.git
 cd vocabulary-notebook
-python3.11 -m venv .venv
-./.venv/bin/python -m pip install --upgrade pip setuptools
-./.venv/bin/python -m pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 # 仅首次创建配置，不覆盖已有设置。
 test -f config.json || cp config.json.example config.json
-./.venv/bin/python app.py
+python app.py
 ```
 
 打开 [http://localhost:1400](http://localhost:1400)。`python app.py` 会托管 `frontend/dist`；不需要另外运行前端服务器或启动脚本。
@@ -70,13 +72,9 @@ test -f config.json || cp config.json.example config.json
 
 网页保存配置后立即生效。已有 Key 不会回传浏览器，留空保留原值。若直接修改 `config.json`，需重启后端。配置结构见 [config.json.example](config.json.example)。
 
-可选启用本机词典拼写校验：确认系统已有 Enchant 库及 `en_US` 词典后，运行 `./.venv/bin/python -m pip install -r requirements-spellcheck.txt`。系统要求见 [PyEnchant 安装说明](https://pyenchant.github.io/pyenchant/install.html)。未安装时跳过词典检查，例句中文字符和释义格式检查仍然执行。
+可选启用本机词典拼写校验：确认系统已有 Enchant 库及 `en_US` 词典后，运行 `python -m pip install -r requirements-spellcheck.txt`。系统要求见 [PyEnchant 安装说明](https://pyenchant.github.io/pyenchant/install.html)。未安装时跳过词典检查，例句中文字符和释义格式检查仍然执行。
 
-### 从旧版本升级
-
-先停止应用，将词库 `words.json`、配置 `config.json` 和凭据目录 `.secrets` 备份到仓库外。低于 Python 3.11 的虚拟环境需用新解释器重建并安装依赖；新环境验证成功前保留旧环境。
-
-首次读取旧词库会保留 `words.json.legacy.bak`，再迁移为支持同步的缓存。不要用旧版程序写入新缓存；迁移与回退说明见 [Drive 同步指南](docs/DRIVE_SYNC.md#旧词库备份与升级)。新版只允许本机访问，跨电脑使用 Drive 同步，不再提供原来的局域网直连方式。
+旧版用户升级前请先备份数据，迁移与回退说明见 [Drive 同步指南](docs/DRIVE_SYNC.md#旧词库备份与升级)。
 
 ## 日常使用
 
@@ -127,7 +125,7 @@ test -f config.json || cp config.json.example config.json
 PDF 使用 `fpdf2` 直接生成，不依赖 HTML 模板。macOS 默认尝试系统 Arial Unicode 字体；其他环境可指定覆盖所需中文、音标的静态 TTF / OTF 字体：
 
 ```bash
-VOCABULARY_CJK_FONT=/absolute/path/to/font.ttf ./.venv/bin/python app.py
+VOCABULARY_CJK_FONT=/absolute/path/to/font.ttf python app.py
 ```
 
 不支持 TTC 字体集合或可变字体。字体不可用、缺少字形或单条词汇超出一页容量时，导出会明确报错，可改用 CSV / JSON。项目不打包第三方字体，使用前请确认字体授权。
@@ -212,10 +210,3 @@ docs/                     Drive 同步与备份指南
 问题反馈请使用 [Issue 模板](https://github.com/Eric-Zhou-0302/vocabulary-notebook/issues/new/choose)。提交改动前阅读 [贡献指南](CONTRIBUTING.md)。
 
 本项目采用 [MIT License](LICENSE)，Copyright © 2026 Eric Zhou。
-
-<details>
-<summary>项目封面</summary>
-
-![Vocabulary Notebook 概念封面](assets/vocabulary-notebook-cover.jpg)
-
-</details>
