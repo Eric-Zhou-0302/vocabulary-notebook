@@ -315,7 +315,7 @@ def _review_stats_for(words: list[dict], now: datetime, daily_new_limit: int,
     }
 
 
-async def enrich_word(word: str) -> tuple[str, str, str]:
+async def enrich_word(word: str, context: str = "") -> tuple[str, str, str]:
     """调用配置好的 Provider 补充音标、释义和例句，返回 (phonetic, definition, example)。服务或格式错误抛出异常；仅明确的三字段空响应表示未识别词汇。"""
     logger = logging.getLogger("uvicorn")
 
@@ -395,6 +395,9 @@ primary meaning first (e.g., "pharmacy" — "药店" comes before
 
 Reply ONLY with a JSON object, no other text:
 {{"phonetic": "/.../", "definition": "n. 释义一，释义二\\nvt. 及物释义", "example": "..."}}'''
+    if context:
+        prompt += "\nCourse context (use for sense and example selection): " + context[:600]
+
     try:
         if config.get_provider() == "ollama":
             ollama_cfg = config.get_ollama_config()
@@ -1055,17 +1058,14 @@ async def create_word(body: dict):
                     detail={"message": f"「{w['word']}」已存在，已展示已有内容", **_word_response(w)},
                 )
 
-        matches = [word for word in data["words"] if word["word"].casefold() == word_lower]
-        source = max(matches, key=lambda word: sum(bool(word.get(key, "").strip())
-                     for key in ("definition", "phonetic", "example")), default={})
         word_id = uuid.uuid4().hex[:12]
         word_obj = {
             "id": word_id,
             "notebook_id": notebook_id,
             "word": word_text,
-            "definition": _text(body, "definition") or source.get("definition", ""),
-            "phonetic": source.get("phonetic", ""),
-            "example": source.get("example", ""),
+            "definition": _text(body, "definition"),
+            "phonetic": "",
+            "example": "",
             "created_at": now_iso(),
         }
 
@@ -1084,14 +1084,17 @@ async def create_word(body: dict):
 
 
 
-def _discard_unrecognized_new_word(word_id):
+def _discard_unrecognized_new_word(word_id, notebook_id, context):
     with _write_lock:
         candidate = _new_enrichment_candidates.get(word_id)
         if candidate is None:
             return False
         data = load_words()
         current = next((w for w in data["words"] if w["id"] == word_id), None)
-        if current != candidate["word"] or _word_operation_ids(data, word_id) != candidate["operations"]:
+        book = next((b for b in data["notebooks"] if b["id"] == notebook_id), {})
+        current_context = book.get("name", "") + ": " + book.get("description", "")
+        if (current != candidate["word"] or current_context != context
+                or _word_operation_ids(data, word_id) != candidate["operations"]):
             return False
         data["words"] = [w for w in data["words"] if w["id"] != word_id]
         save_words(data)
@@ -1099,8 +1102,8 @@ def _discard_unrecognized_new_word(word_id):
 
 
 
-async def _reject_unrecognized(word_id, word_text):
-    removed = _discard_unrecognized_new_word(word_id)
+async def _reject_unrecognized(word_id, word_text, notebook_id, context):
+    removed = _discard_unrecognized_new_word(word_id, notebook_id, context)
     reason = "未识别为有效词汇，已自动移除本次新增内容，请检查拼写。" if removed else "未识别为有效词汇，已有或已修改的内容已保留，请检查拼写。"
     _enrich_states[word_id] = {"status": "removed" if removed else "failed", "error": reason}
     if _event_queue is not None:
@@ -1123,9 +1126,12 @@ async def _enrich_worker():
             current_word = next((w for w in current_data["words"] if w["id"] == word_id), None)
             if current_word is None:
                 continue
-            phonetic, definition, example = await enrich_word(word_text)
+            notebook_id = current_word.get("notebook_id", sync_storage.DEFAULT_BOOK)
+            book = next((b for b in current_data["notebooks"] if b["id"] == notebook_id), {})
+            context = book.get("name", "") + ": " + book.get("description", "")
+            phonetic, definition, example = await enrich_word(word_text, context)
             if not phonetic and not definition and not example:
-                await _reject_unrecognized(word_id, word_text)
+                await _reject_unrecognized(word_id, word_text, notebook_id, context)
                 _enrich_batch_done += 1
                 continue
 
@@ -1133,7 +1139,7 @@ async def _enrich_worker():
             ok, reason = _enrich_post_check(word_text, phonetic, definition, example)
             if not ok:
                 if reason.startswith(("word 不在英语词典", "词组中分词拼写错")):
-                    await _reject_unrecognized(word_id, word_text)
+                    await _reject_unrecognized(word_id, word_text, notebook_id, context)
                     _enrich_batch_done += 1
                     continue
                 _enrich_states[word_id] = {"status": "failed", "error": reason}
@@ -1153,6 +1159,10 @@ async def _enrich_worker():
                 data = load_words()
                 for w in data["words"]:
                     if w["id"] == word_id and w["word"] == word_text:
+                        book = next((b for b in data["notebooks"] if b["id"] == notebook_id), {})
+                        current_context = book.get("name", "") + ": " + book.get("description", "")
+                        if w.get("notebook_id", sync_storage.DEFAULT_BOOK) != notebook_id or current_context != context:
+                            break
                         if phonetic and not w.get("phonetic"):
                             w["phonetic"] = phonetic
                         if definition and not w.get("definition"):

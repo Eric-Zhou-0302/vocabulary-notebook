@@ -23,7 +23,7 @@ def test_cleanup_only_removes_unchanged_new_invalid_entries(tmp_path, monkeypatc
         wid = created["word"]["id"]
         before = app.DATA_FILE.read_bytes()
 
-        async def enrich(_word):
+        async def enrich(_word, context=""):
             if case == "unavailable":
                 raise app.EnrichmentUnavailable("服务不可用")
             if case == "legacy":
@@ -86,7 +86,7 @@ def test_successful_ai_never_overwrites_manual_definition(tmp_path, monkeypatch)
         monkeypatch.setattr(app, "_event_queue", asyncio.Queue())
         wid = (await app.create_word({"word": "contract"}))["word"]["id"]
 
-        async def enrich(_word):
+        async def enrich(_word, context=""):
             app.update_word(wid, {"definition": "n. 人工释义"})
             return "/test/", "n. AI释义", "A contract."
 

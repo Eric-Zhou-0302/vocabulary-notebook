@@ -164,3 +164,7 @@ npm --prefix frontend run dev -- --host 127.0.0.1
 问题反馈请使用 [Issue 模板](https://github.com/Eric-Zhou-0302/vocove/issues/new/choose)，提交改动前请阅读[贡献指南](CONTRIBUTING.md)。
 
 本项目采用 [MIT License](LICENSE)，Copyright © 2026 Eric Zhou。
+
+### 课程释义
+
+单词本名称和描述会作为 AI 补全的课程语境，发送给所选模型。可分别创建法律、金融等单词本；同一个词在不同单词本中新建时独立生成释义，显式复制操作仍保留原内容。补全过程中调整课程信息或移动单词，旧结果不会写入，需再次补全。已有释义和复习记录不自动改写，同步格式保持兼容。
