@@ -157,7 +157,10 @@ VOCOVE_CJK_FONT=/absolute/path/to/font.ttf python app.py
 ```bash
 ./.venv/bin/python -m pip install -r requirements-dev.txt
 npm --prefix frontend ci
+npm --prefix desktop ci --ignore-scripts
 ```
+
+普通检查只需桌面逻辑测试依赖，可跳过安装脚本。需要启动或打包桌面应用时，先运行 `npm --prefix desktop ci` 完整安装桌面依赖。
 
 需要热更新时，在两个终端分别运行：
 
@@ -174,9 +177,9 @@ npm --prefix frontend run dev -- --host 127.0.0.1
 开发页面为 [http://localhost:5173](http://localhost:5173)。不要同时启动两个后端操作同一份词库；实例锁会拒绝重复启动。
 
 ```bash
-make check    # Python/JS 静态检查、前后端测试、前端构建
+make check    # Python/JS 静态检查、前后端及桌面测试、前端构建
 make lint    # 仅静态检查
-make test    # 仅测试
+make test    # 后端、前端与桌面测试
 make build   # 更新 frontend/dist
 ```
 

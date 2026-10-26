@@ -7,9 +7,12 @@
 ```bash
 ./.venv/bin/python -m pip install -r requirements-dev.txt
 npm --prefix frontend ci
+npm --prefix desktop ci --ignore-scripts
 ```
 
-使用项目 `.venv` 和 `frontend/node_modules`，不需要全局安装 Python / npm 包。运行时使用 Python 3.11+；Node.js 22.13+（22.x）或 24+ 可运行前端检查。CI 使用 Node.js 22，Python 3.11 与 3.12。
+普通检查只需桌面逻辑测试依赖，可跳过安装脚本。需要启动或打包桌面应用时，先运行 `npm --prefix desktop ci` 完整安装桌面依赖。
+
+使用项目 `.venv`、`frontend/node_modules` 和 `desktop/node_modules`，不需要全局安装 Python / npm 包。运行时使用 Python 3.11+；Node.js 22.13+（22.x）或 24+ 可运行前端检查。CI 使用 Node.js 22，Python 3.11 与 3.12。
 
 `requirements.txt` 固定直接运行依赖，`constraints.txt` 约束已核验的间接依赖修补版本，`requirements-dev.txt` 增加测试与静态检查工具；`frontend/package-lock.json` 固定前端依赖解析。安装前端优先用 `npm ci`。Python 约束文件不是全依赖锁，重建环境后应检查实际解析出的版本。
 
@@ -58,7 +61,7 @@ Electron 入口、Python 后端打包和安装包构建见 [桌面版指南](doc
 
 修改桌面代码后，除相关后端回归测试外，运行 `npm --prefix desktop test`；打包前运行前端构建。安装包必须在目标操作系统和架构上构建、启动与退出验证，不能将 macOS 检查结果视为 Windows 验收。自动验证使用临时 `VOCOVE_DESKTOP_USER_DATA_DIR`，不得指向日常桌面数据或仓库真实词库。
 
-`desktop-build.yml` 通过手动触发生成各平台构建产物，不自动创建 Release 或发布安装包。增加签名、更新分发或迁移行为时，应单独说明其对本机数据和发布流程的影响。
+`desktop-build.yml` 在推送到 `main` 或 `codex/desktop-packaging` 分支时运行，也支持手动触发；它生成各平台构建产物，不自动创建 Release 或发布安装包。增加签名、更新分发或迁移行为时，应单独说明其对本机数据和发布流程的影响。
 
 ## 代码结构与边界
 

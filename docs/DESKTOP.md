@@ -114,9 +114,9 @@ VOCOVE_DESKTOP_PYTHON="$PWD/.venv/bin/python" npm --prefix desktop run smoke
 
 macOS 上通过检查，只说明该架构的应用可运行；Windows 安装、卸载和应用运行需要在 Windows 上分别验证。未完成的项目应记录为未验收，不能以生成安装包代替功能验证。
 
-`.github/workflows/desktop-build.yml` 在推送到 `codex/desktop-packaging` 时自动运行，也保留 `workflow_dispatch` 手动入口；在 macOS Apple Silicon、macOS Intel 和 Windows x64 上分别检查、打包和运行桌面冒烟验收。Windows 还会在 GitHub 托管 runner 的独立临时目录中静默运行 NSIS 安装包，确认安装后的应用通过冒烟检查，再等待静默卸载完成，检查安装文件及注册表项已移除；成功或失败后都会清理本次临时目录。安装验收脚本拒绝在本机运行。同一分支的新运行会取消尚未完成的旧运行。工作流仅上传构建文件供下载，不自动发布 GitHub Release；提交、推送或运行远程工作流需按项目权限约定处理。
+`.github/workflows/desktop-build.yml` 在推送到 `main` 或 `codex/desktop-packaging` 时自动运行，也可在 GitHub Actions 的 **Desktop packages** 工作流中手动选择分支运行；在 macOS Apple Silicon、macOS Intel 和 Windows x64 上分别检查、打包和运行桌面冒烟验收。Windows 还会在 GitHub 托管 runner 的独立临时目录中静默运行 NSIS 安装包，确认安装后的应用通过冒烟检查，再等待静默卸载完成，检查安装文件及注册表项已移除；成功或失败后都会清理本次临时目录。安装验收脚本拒绝在本机运行。同一分支的新运行会取消尚未完成的旧运行。工作流仅上传构建文件供下载，不自动发布 GitHub Release；提交、推送或运行远程工作流需按项目权限约定处理。
 
-分支的 `push` 触发不要求将桌面工作流合入默认分支，因此桌面分支可以独立验收。手动入口要求默认分支包含该工作流。见 [GitHub 工作流触发规则](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#push)。也可按上面的命令在 Windows 或另一台 Mac 上本地构建。
+也可按上面的命令在 Windows 或另一台 Mac 上本地构建。
 
 ## 签名与分发
 
