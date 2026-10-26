@@ -92,3 +92,6 @@ jobs:
             desktop/release/*.dmg
             desktop/release/*.zip
             desktop/release/*.exe
+            desktop/release/*.yml
+            desktop/release/*.blockmap
+            desktop/release/*.sha256

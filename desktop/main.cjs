@@ -12,6 +12,7 @@ const { rendererSmoke, waitForSmokePaint } = require('./lib/smoke.cjs')
 const { SESSION_PARTITION, LEGACY_SORT_KEY, environmentValue, clearEnvironmentValue } = require('./lib/compat.cjs')
 const { profilePlan, prepareProfile } = require('./lib/profile.cjs')
 const { backendLaunch } = require('./lib/backend-launch.cjs')
+const { DesktopUpdates } = require('./lib/updates.cjs')
 
 const smokeTest = process.argv.includes('--smoke-test')
 const root = path.resolve(__dirname, '..')
@@ -42,6 +43,8 @@ let quitting = false
 let finalExit = false
 let exitCode = 0
 let failing = false
+let updates
+let updateTimer
 
 function readPreferences() {
   try { return sanitizePreferences(JSON.parse(fs.readFileSync(preferencesFile, 'utf8'))) }
@@ -118,7 +121,11 @@ function installSession() {
 
 function installMenu() {
   const menu = []
-  if (process.platform === 'darwin') menu.push({ label: 'Vocove', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] })
+  const updateItems = [
+    { id: 'check-updates', label: '检查更新…', click: () => updates.check() },
+    { id: 'cancel-update', label: '取消下载更新', visible: false, click: () => updates.cancel() },
+  ]
+  if (process.platform === 'darwin') menu.push({ label: 'Vocove', submenu: [{ role: 'about' }, ...updateItems, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] })
   menu.push({ label: '文件', submenu: [
     { label: '打开数据目录', click: () => shell.openPath(dataDirectory) },
     { type: 'separator' },
@@ -127,7 +134,66 @@ function installMenu() {
   menu.push({ label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] })
   menu.push({ label: '显示', submenu: [{ role: 'reload' }, { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }] })
   menu.push({ label: '窗口', submenu: [{ role: 'minimize' }, { role: 'zoom' }] })
+  if (process.platform !== 'darwin') menu.push({ label: '帮助', submenu: [{ role: 'about' }, ...updateItems] })
   Menu.setApplicationMenu(Menu.buildFromTemplate(menu))
+}
+
+function installUpdates() {
+  const enabled = app.isPackaged && !smokeTest && ['darwin', 'win32'].includes(process.platform)
+  let source
+  if (enabled && process.platform === 'win32') {
+    const { NsisUpdater } = require('electron-updater')
+    const { autoUpdater } = require('electron')
+    const { WindowsUpdateSource } = require('./lib/windows-update.cjs')
+    source = new WindowsUpdateSource(new NsisUpdater(), app.getVersion(), { quitEvents: autoUpdater })
+  } else if (enabled) {
+    const { net } = require('electron')
+    const { GitHubDmgUpdateSource } = require('./lib/github-dmg-update.cjs')
+    source = new GitHubDmgUpdateSource({
+      currentVersion: app.getVersion(), arch: process.arch,
+      cacheDir: path.join(userData, 'updates'), fetchImpl: (...args) => net.fetch(...args),
+    })
+  }
+  updates = new DesktopUpdates({
+    enabled, source, currentVersion: app.getVersion(), platform: process.platform,
+    showDialog: options => mainWindow && !mainWindow.isDestroyed()
+      ? dialog.showMessageBox(mainWindow, options) : dialog.showMessageBox(options),
+    onState: ({ state, label, enabled: menuEnabled, percent }) => {
+      const menu = Menu.getApplicationMenu()
+      const checkItem = menu?.getMenuItemById('check-updates')
+      if (checkItem) { checkItem.label = label; checkItem.enabled = menuEnabled }
+      const cancelItem = menu?.getMenuItemById('cancel-update')
+      if (cancelItem) cancelItem.visible = state === 'downloading'
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setProgressBar(state === 'downloading' ? (Number.isFinite(percent) ? percent / 100 : 2) : -1)
+      }
+    },
+    install: async file => {
+      clearTimeout(updateTimer)
+      await savePreferences()
+      // 安装前先让 Python 落盘并释放文件；普通退出仍走原来的收尾逻辑。
+      quitting = true
+      try {
+        await backend?.stop()
+        if (process.platform === 'darwin') {
+          const error = await shell.openPath(file)
+          if (error) throw new Error('无法打开安装包')
+          finalExit = true
+          app.quit()
+        } else {
+          finalExit = true
+          await source.install()
+        }
+      } catch (error) {
+        // 后端已停止，失败后退出，避免留下仍能操作的失效页面。
+        finalExit = true
+        await dialog.showMessageBox({ type: 'error', title: 'Vocove 更新', message: '无法启动安装，请重新打开 Vocove 后重试。', buttons: ['退出'] })
+        app.exit(1)
+        throw error
+      }
+    },
+  })
+  return enabled
 }
 
 async function createWindow() {
@@ -221,9 +287,15 @@ async function start() {
   origin = await backend.start()
   if (quitting) return
   installSession()
+  const canUpdate = installUpdates()
   installMenu()
   const window = await createWindow()
   if (smokeTest && !quitting) await runSmokeTest(window)
+  else if (canUpdate && !quitting) {
+    // 启动后只检查一次，不自动下载；离线和无新版时保持安静。
+    updateTimer = setTimeout(() => updates.check({ manual: false }), 10000)
+    updateTimer.unref()
+  }
 }
 
 if (!ownsInstanceLock) {
@@ -248,6 +320,8 @@ else {
     event.preventDefault()
     if (quitting) return
     quitting = true
+    clearTimeout(updateTimer)
+    updates?.dispose()
     ;(async () => {
       await savePreferences()
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy()

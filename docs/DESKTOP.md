@@ -78,12 +78,12 @@ $env:VOCOVE_DESKTOP_PYTHON = (Resolve-Path .\.venv-desktop\Scripts\python.exe).P
 npm --prefix desktop run dist
 ```
 
-`dist` 先构建前端，再用 PyInstaller 打包后端，最后生成当前平台的安装包。`npm --prefix desktop run pack` 执行相同准备步骤，但只生成可运行的应用目录，适合本地验收。
+`dist` 先构建前端，再用 PyInstaller 打包后端，最后生成当前平台的安装包、更新元数据及同名 `.sha256` 校验文件。`npm --prefix desktop run pack` 执行相同准备步骤，但只生成可运行的应用目录，不生成安装包校验文件，适合本地验收。
 
 | 路径 | 内容 |
 | --- | --- |
 | `desktop/build/backend/vocove-backend/` | 当前平台的 Python 后端及运行依赖 |
-| `desktop/release/` | Electron 应用目录与安装包 |
+| `desktop/release/` | Electron 应用目录、安装包、更新元数据与 `.sha256` 校验文件 |
 | `desktop/package-lock.json` | Electron 与打包工具依赖锁 |
 | `requirements-desktop.txt` | 后端运行依赖及 PyInstaller 打包依赖 |
 | `desktop/resources/` | 打包使用的应用图标、DMG 背景及 NSIS 位图 |
@@ -122,4 +122,24 @@ macOS 上通过检查，只说明该架构的应用可运行；Windows 安装、
 
 桌面安装包见 [v1.3.0-beta 发布页](https://github.com/Eric-Zhou-0302/vocove/releases/tag/v1.3.0-beta)。macOS 请选择与芯片匹配的 arm64（Apple Silicon）或 x64（Intel）版本；Windows 提供 x64 安装包。
 
-此版本不包含自动更新服务。更新时请先退出应用，再安装新版本；升级前建议保留完整备份，数据位置及迁移方式见上文。
+**当前源码已加入应用内更新，尚未发布；上方 v1.3.0-beta 发布页中的旧安装包没有该功能。** 已安装的旧版需要手动升级一次到包含更新器的新版本。后续发布须使用更高的语义化版本号，不能覆盖原版本号来触发更新。
+
+### 检查、下载与安装
+
+- **入口**：macOS 使用「Vocove → 检查更新」，Windows 使用「帮助 → 检查更新」。安装版在启动 10 秒后仅检查一次，离线或无新版时不提示；发现新版后询问是否下载。源码开发和冒烟模式不联网检查更新。
+- **下载**：用户确认后下载匹配平台与架构的安装包，菜单及系统进度条显示进度，可从菜单取消下载。稳定版只接收稳定发布，预发布版可接收后续预发布或稳定版；不会降级。
+- **Windows**：安装包通过更新元数据中的摘要校验后，用户再次确认「重启并安装」。应用保存偏好、停止后端，然后启动 NSIS 安装向导；按提示完成安装并重新打开 Vocove。
+- **macOS**：当前构建采用临时签名，更新器下载并校验 DMG。用户确认后，应用退出并打开安装包，再将 Vocove 拖入「应用程序」替换旧版，完成后重新打开。当前实现不自动替换 `.app`；正式 Developer ID 签名及标准 macOS 自动安装仍需另行接入和验收。
+
+安装包只替换程序文件，词库、学习进度与凭据保存在独立数据目录。升级前建议保留完整备份，数据位置及迁移方式见上文。
+
+### 更新分发
+
+更新源固定为公开仓库 [Eric-Zhou-0302/vocove 的 Releases](https://github.com/Eric-Zhou-0302/vocove/releases)，不需要用户配置 GitHub Token。构建脚本始终使用 `--publish never`，CI 只上传构建产物；创建 Release、上传文件或触发远程流程仍须遵循授权约定。
+
+发布包含更新器的新版本时，将各平台验收通过的产物放在同一个更高版本号的 Release，标签采用 `v<版本号>`，版本号与 `desktop/package.json` 一致，并准确设置 GitHub 的预发布标记：
+
+- macOS 上传对应架构的 `.dmg` 与同名 `.dmg.sha256`；保留 `.zip` 及其校验文件供手动分发。DMG 下载优先验证 GitHub API 提供的 SHA-256 `digest`，缺失时读取同名 `.sha256`；两者均不可用则拒绝安装。
+- Windows 上传 `.exe`、同名 `.exe.sha256`、`latest.yml` 及构建生成的 `.blockmap`。`latest.yml` 必须与该 Release 的安装包匹配。GitHub beta 更新会先查找 `beta.yml`，缺失时回退到 `latest.yml`，因此 `latest.yml` 也应随预发布上传。
+
+GitHub provider 根据 Release 的预发布属性选版；`generateUpdatesFilesForAllChannels` 不会为它自动展开全部通道。两个 macOS 架构的独立构建会产生同名 `latest-mac.yml`，不能通过覆盖上传来合并架构。当前 DMG 更新源无需这些文件；未来接入标准 macOS 自动安装时，需要先处理签名和多架构元数据合并。

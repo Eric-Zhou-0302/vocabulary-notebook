@@ -37,4 +37,9 @@ if (!args.has('--backend-only')) {
     process.platform === 'darwin' ? '--mac' : '--win', `--${process.arch}`,
     ...(args.has('--dir') ? ['--dir'] : []),
   ], desktop);
+  if (!args.has('--dir')) {
+    run(process.execPath, [path.join(desktop, 'scripts/update-checksums.cjs'),
+      process.platform, process.arch, require('../package.json').version, path.join(desktop, 'release'),
+    ], desktop);
+  }
 }

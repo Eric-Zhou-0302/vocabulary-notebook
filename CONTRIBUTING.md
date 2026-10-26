@@ -63,6 +63,8 @@ Electron 入口、Python 后端打包和安装包构建见 [桌面版指南](doc
 
 `desktop-build.yml` 在推送到 `main` 时运行，也支持手动触发；它生成各平台构建产物，不自动创建 Release 或发布安装包。更改分发或迁移行为时，应单独说明其对本机数据和发布流程的影响。
 
+更新逻辑测试使用模拟版本源、下载响应、对话框及安装回调，不访问真实词库，也不启动安装程序。源码和冒烟模式不联网检查更新；实际升级链路仍需分别在 Windows 与各 macOS 架构上验收。发布文件清单与预发布标记要求见 [桌面版指南](docs/DESKTOP.md#更新分发)。
+
 ## 代码结构与边界
 
 | 模块 | 维护重点 |
@@ -75,6 +77,7 @@ Electron 入口、Python 后端打包和安装包构建见 [桌面版指南](doc
 | `pdf_export.py` | 排版、分页、字体字形完整性与错误提示 |
 | `desktop_backend.py` | 桌面独立数据目录、启动握手、父进程退出后的服务清理 |
 | `desktop/` | Electron 进程管理、窗口隔离、导航与下载、平台打包 |
+| `desktop/lib/updates.cjs` | 更新确认、进度、取消及安装状态；安装前须保存偏好并关闭后端 |
 | `frontend/src/lib/` | 无 React 生命周期依赖、可用 Node 测试的纯逻辑 |
 | `frontend/src/use*.js` | 请求、事件、轮询与页面状态生命周期 |
 
@@ -94,8 +97,11 @@ Electron 入口、Python 后端打包和安装包构建见 [桌面版指南](doc
 
 常规检查使用 lockfile 和已固定的依赖。依赖升级单独审查，记录旧/新版本、兼容性影响与验证，不直接执行 `npm audit fix --force`。
 
+应用内更新新增固定运行依赖 `electron-updater` **6.8.11** 与 `semver` **7.8.5**，未升级现有 Electron / electron-builder。此次安装后的桌面依赖 `npm audit` 为 0 条已知漏洞；后续维护仍应重新检查，不代表跨平台安装验收已完成。
+
 ```bash
 npm --prefix frontend audit
+npm --prefix desktop audit
 ./.venv/bin/python -m pip check
 ```
 

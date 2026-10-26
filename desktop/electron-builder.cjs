@@ -16,7 +16,9 @@ module.exports = {
   ],
   asar: true,
   npmRebuild: false,
-  publish: null,
+  publish: { provider: 'github', owner: 'Eric-Zhou-0302', repo: 'vocove', private: false },
+  // GitHub 依照 Release 的预发布标记选版；未指定 channel 时生成 latest*.yml。
+  generateUpdatesFilesForAllChannels: true,
   artifactName: '${productName}-${version}-${os}-${arch}.${ext}',
   mac: {
     icon: 'icon.icns',
