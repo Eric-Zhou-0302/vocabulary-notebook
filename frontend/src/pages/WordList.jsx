@@ -9,6 +9,7 @@ import ExportMenu from '../components/ExportMenu'
 import EnrichProgress from '../components/EnrichProgress'
 import NavigationIcon from '../components/NavigationIcon'
 import { readLegacyWordSort } from '../lib/compat'
+import { isShortcutEvent } from '../lib/keyboard'
 
 export default function WordList({ searchInputRef }) {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -225,11 +226,18 @@ export default function WordList({ searchInputRef }) {
           ref={searchInputRef}
           type="text"
           aria-label="搜索单词或释义"
+          aria-keyshortcuts="/ Escape"
           placeholder="搜索单词或释义…"
           autoComplete="off"
           spellCheck={false}
           value={q}
           onChange={e => { setQ(e.target.value); setPage(1) }}
+          onKeyDown={event => {
+            if (event.key !== 'Escape' || !isShortcutEvent(event)) return
+            event.preventDefault()
+            if (q) { setQ(''); setPage(1) }
+            else event.currentTarget.blur()
+          }}
         />
         {q ? <button type="button" className="search-clear" aria-label="清除搜索" onClick={() => { setQ(''); setPage(1); searchInputRef.current?.focus() }}><NavigationIcon name="close" /></button> : <kbd aria-hidden="true">/</kbd>}
       </div>
@@ -378,7 +386,7 @@ export default function WordList({ searchInputRef }) {
                   onChange={e => setPageInput(e.target.value.replace(/\D/g, ''))}
                   onBlur={e => commitPageInput(e.target.value)}
                   onKeyDown={e => {
-                    if (e.key === 'Enter') {
+                    if (e.key === 'Enter' && isShortcutEvent(e)) {
                       e.preventDefault()
                       e.currentTarget.blur()
                     }
