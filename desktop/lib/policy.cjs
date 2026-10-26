@@ -1,6 +1,6 @@
 'use strict'
 
-const TOKEN_HEADER = 'X-Vocab-Desktop-Token'
+const TOKEN_HEADER = 'X-Vocove-Desktop-Token'
 
 function backendOrigin(value) {
   if (typeof value !== 'string') throw new Error('后端启动地址无效')

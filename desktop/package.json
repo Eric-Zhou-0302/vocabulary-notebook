@@ -1,9 +1,9 @@
 {
-  "name": "vocabulary-notebook-desktop",
-  "productName": "Vocabulary Notebook",
+  "name": "vocove-desktop",
+  "productName": "Vocove",
   "version": "1.2.0",
   "private": true,
-  "description": "本地优先的英文词汇笔记本桌面端",
+  "description": "Vocove 本地优先的英文词汇学习桌面应用",
   "author": "Eric Zhou",
   "license": "MIT",
   "main": "main.cjs",

@@ -11,7 +11,7 @@ async function rendererSmoke() {
   async function json(url, method, body) { return (await request(url, method, body)).json() }
   const deadline = Date.now() + 10000
   while (!document.querySelector('#root a') && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50))
-  check(document.title === '词汇笔记本' && document.querySelector('#root a'), '界面未渲染')
+  check(document.title === 'Vocove' && document.querySelector('#root a'), '界面未渲染')
   check(typeof require === 'undefined' && typeof process === 'undefined', 'renderer Node 权限未关闭')
   check((await json('/api/desktop/health')).status === 'ok', '后端未就绪')
   check((await json('/api/words')).total === 0, '冒烟词库不是空词库')

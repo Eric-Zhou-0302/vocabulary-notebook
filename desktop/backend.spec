@@ -16,8 +16,8 @@ a = Analysis(
     noarchive=False,
 )
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='vocab-backend',
+exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='vocove-backend',
           debug=False, bootloader_ignore_signals=False, strip=False, upx=False,
           console=True, disable_windowed_traceback=False, argv_emulation=False,
           target_arch=None, codesign_identity=None, entitlements_file=None)
-coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='vocab-backend')
+coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='vocove-backend')

@@ -1,4 +1,4 @@
-"""词汇笔记本 — FastAPI 后端"""
+"""Vocove — FastAPI 后端"""
 import asyncio
 import csv
 import io
@@ -7,7 +7,6 @@ import hmac
 import math
 import json
 import logging
-import os
 import re
 import threading
 import uuid
@@ -26,6 +25,7 @@ from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 import config
+from compat import getenv
 from event_broadcast import EventBroadcast
 import fsrs
 import sync_storage
@@ -110,12 +110,12 @@ async def _periodic_backup_loop():
             print(f"  [backup] failed: {type(e).__name__}: {e}")
 
 
-app = FastAPI(title="Vocabulary Notebook", version="1.2.0", lifespan=lifespan)
+app = FastAPI(title="Vocove", version="1.2.0", lifespan=lifespan)
 
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
 
-_DESKTOP_TOKEN = os.environ.get("VOCAB_DESKTOP_TOKEN", "")
-_DESKTOP_ORIGIN = os.environ.get("VOCAB_DESKTOP_ORIGIN", "")
+_DESKTOP_TOKEN = getenv("VOCOVE_DESKTOP_TOKEN", "")
+_DESKTOP_ORIGIN = getenv("VOCOVE_DESKTOP_ORIGIN", "")
 _ALLOWED_ORIGINS = (
     "http://localhost:1400", "http://127.0.0.1:1400",
     "http://localhost:5173", "http://127.0.0.1:5173",
@@ -137,16 +137,16 @@ async def local_origin_guard(request: Request, call_next):
     except ValueError:
         local_peer = False
     if not local_peer:
-        return JSONResponse({"detail": "仅允许本机访问词汇本"}, status_code=403)
+        return JSONResponse({"detail": "仅允许本机访问 Vocove"}, status_code=403)
     # 桌面窗口通过主进程注入令牌，其他本机网页也不能读取词库或静态内容。
     if _DESKTOP_TOKEN and not hmac.compare_digest(
-        request.headers.get("x-vocab-desktop-token", "").encode("utf-8"),
+        request.headers.get("x-vocove-desktop-token", "").encode("utf-8"),
         _DESKTOP_TOKEN.encode("utf-8"),
     ):
         return JSONResponse({"detail": "桌面会话验证失败"}, status_code=403)
     origin = request.headers.get("origin")
     if request.method not in ("GET", "HEAD", "OPTIONS") and origin and origin not in _ALLOWED_ORIGINS:
-        return JSONResponse({"detail": "仅允许本地词汇本页面修改数据"}, status_code=403)
+        return JSONResponse({"detail": "仅允许本地 Vocove 页面修改数据"}, status_code=403)
     return await call_next(request)
 
 
@@ -159,9 +159,9 @@ async def desktop_health():
 # ─── Config ───────────────────────────────────────────────
 
 # 测试/临时验收可通过环境变量隔离数据；正常启动仍使用项目内 words.json。
-DATA_FILE = Path(os.environ.get("VOCAB_DATA_FILE", "words.json"))
+DATA_FILE = Path(getenv("VOCOVE_DATA_FILE", "words.json"))
 CHINA_TZ = timezone(timedelta(hours=8))
-STATIC_DIR = Path(os.environ.get("VOCAB_DESKTOP_STATIC_DIR", "frontend/dist"))
+STATIC_DIR = Path(getenv("VOCOVE_DESKTOP_STATIC_DIR", "frontend/dist"))
 
 # SSE 事件总线 — 后台 enrichment 完成后通知前端
 # 必须在 startup 事件中初始化，否则 asyncio.Queue() 会绑定到错误的 event loop（Python 3.9）
@@ -836,7 +836,7 @@ def export_words(
         return StreamingResponse(
             iter([out.getvalue().encode("utf-8")]),
             media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f"attachment; filename=vocabulary-{today}.csv"},
+            headers={"Content-Disposition": f"attachment; filename=vocove-{today}.csv"},
         )
 
     if format == "pdf":
@@ -848,7 +848,7 @@ def export_words(
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=vocabulary-{today}.pdf"},
+            headers={"Content-Disposition": f"attachment; filename=vocove-{today}.pdf"},
         )
 
     # 默认 JSON
@@ -862,7 +862,7 @@ def export_words(
     return StreamingResponse(
         iter([out.getvalue()]),
         media_type="application/json; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename=vocabulary-{today}.json"},
+        headers={"Content-Disposition": f"attachment; filename=vocove-{today}.json"},
     )
 
 
@@ -1384,7 +1384,7 @@ def export_library():
     data = load_words()
     return JSONResponse({"version": sync_storage.VERSION, "operations": list(data["_sync"]["operations"].values()),
                          "words": data["words"], "notebooks": data["notebooks"], "exported_at": now_iso()},
-                        headers={"Content-Disposition": "attachment; filename=vocabulary-library.json"})
+                        headers={"Content-Disposition": "attachment; filename=vocove-library.json"})
 
 
 @app.post("/api/library/import")
@@ -1500,7 +1500,7 @@ if __name__ == "__main__":
     port = 1400
 
     print("═" * 52)
-    print("  词汇笔记本  Vocabulary Notebook")
+    print("  Vocove")
     print("═" * 52)
     print(f"  本地访问  →  http://localhost:{port}")
     print("═" * 52)

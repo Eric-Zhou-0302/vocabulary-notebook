@@ -14,14 +14,14 @@ test('readiness accepts only a canonical loopback HTTP origin with an allocated 
 })
 
 test('request authentication never leaks across origins, including a redirected header', () => {
-  const headers = { Accept: 'application/json', 'x-vocab-desktop-token': 'old-secret' }
+  const headers = { Accept: 'application/json', 'x-vocove-desktop-token': 'old-secret' }
   const local = authenticatedHeaders(`${origin}/api/words`, headers, origin, 'new-secret')
   assert.deepEqual(local, { Accept: 'application/json', [TOKEN_HEADER]: 'new-secret' })
   for (const url of ['https://accounts.google.com/o/oauth2/v2/auth', 'http://127.0.0.1:41236/api', 'http://127.0.0.1:41235.evil.example', 'file:///etc/passwd', `${origin.replace('http://', 'http://user:pass@')}/api`]) {
     assert.equal(isBackendUrl(url, origin), false)
     assert.deepEqual(authenticatedHeaders(url, local, origin, 'new-secret'), { Accept: 'application/json' })
   }
-  assert.equal(headers['x-vocab-desktop-token'], 'old-secret')
+  assert.equal(headers['x-vocove-desktop-token'], 'old-secret')
 })
 
 test('only known backend exports can invoke a native save dialog', () => {

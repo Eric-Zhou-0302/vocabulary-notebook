@@ -62,7 +62,7 @@ export default function AppHeader({ dueCount, onOpenHelp, sidebarCollapsed, onTo
       <NavigationIcon name={sidebarCollapsed ? 'expand' : 'collapse'} />
     </button>
     <div className="header-topline">
-      <h1 className="app-title"><Link to="/" aria-label="词汇笔记本"><span className="brand-mark"><NavigationIcon name="words" /></span><span>词汇笔记本<span className="brand-caption">VOCABULARY NOTEBOOK</span></span></Link></h1>
+      <h1 className="app-title"><Link to="/" aria-label="Vocove"><span className="brand-mark"><NavigationIcon name="words" /></span><span>Vocove<span className="brand-caption">个人词汇本</span></span></Link></h1>
       <details className={`header-tools${isSettings ? ' is-current' : ''}`} ref={detailsRef}
         onToggle={event => setOpen(event.currentTarget.open)}>
         <summary className="header-tools-trigger" ref={summaryRef} aria-expanded={open} aria-controls="header-tools-panel"

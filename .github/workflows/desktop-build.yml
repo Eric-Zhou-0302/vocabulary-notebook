@@ -46,18 +46,18 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
-            echo "VOCAB_DESKTOP_PYTHON=$GITHUB_WORKSPACE/.venv-desktop/Scripts/python.exe" >> "$GITHUB_ENV"
+            echo "VOCOVE_DESKTOP_PYTHON=$GITHUB_WORKSPACE/.venv-desktop/Scripts/python.exe" >> "$GITHUB_ENV"
           else
-            echo "VOCAB_DESKTOP_PYTHON=$GITHUB_WORKSPACE/.venv-desktop/bin/python" >> "$GITHUB_ENV"
+            echo "VOCOVE_DESKTOP_PYTHON=$GITHUB_WORKSPACE/.venv-desktop/bin/python" >> "$GITHUB_ENV"
           fi
       - name: Install backend build dependencies
         shell: bash
-        run: '"$VOCAB_DESKTOP_PYTHON" -m pip install -r requirements-desktop.txt -r requirements-dev.txt'
+        run: '"$VOCOVE_DESKTOP_PYTHON" -m pip install -r requirements-desktop.txt -r requirements-dev.txt'
       - name: Check backend on the target platform
         shell: bash
         run: |
-          "$VOCAB_DESKTOP_PYTHON" -m ruff check .
-          "$VOCAB_DESKTOP_PYTHON" -m pytest -q
+          "$VOCOVE_DESKTOP_PYTHON" -m ruff check .
+          "$VOCOVE_DESKTOP_PYTHON" -m pytest -q
       - run: npm --prefix frontend ci
       - run: npm --prefix frontend run check
       - run: npm --prefix desktop ci
@@ -67,14 +67,14 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
-            "desktop/release/win-unpacked/Vocabulary Notebook.exe" --smoke-test
+            "desktop/release/win-unpacked/Vocove.exe" --smoke-test
           else
-            APP=$(find desktop/release -maxdepth 3 -name 'Vocabulary Notebook.app' -print -quit)
-            "$APP/Contents/MacOS/Vocabulary Notebook" --smoke-test
+            APP=$(find desktop/release -maxdepth 3 -name 'Vocove.app' -print -quit)
+            "$APP/Contents/MacOS/Vocove" --smoke-test
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: vocabulary-notebook-${{ matrix.label }}
+          name: vocove-${{ matrix.label }}
           if-no-files-found: error
           retention-days: 14
           path: |

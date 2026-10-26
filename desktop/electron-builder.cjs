@@ -1,16 +1,17 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { NSIS_UPGRADE_GUID } = require('./lib/compat.cjs');
 
 module.exports = {
-  appId: 'net.ericzhou.vocabulary-notebook',
-  productName: 'Vocabulary Notebook',
+  appId: 'net.ericzhou.vocove',
+  productName: 'Vocove',
   electronDist: path.join(__dirname, 'node_modules/electron/dist'),
   directories: { output: 'release', buildResources: 'resources' },
   // 显式白名单：不把仓库、开发环境、词库或凭据装入应用。
   files: ['main.cjs', 'lib/**/*.cjs', 'package.json'],
   extraResources: [
-    { from: 'build/backend/vocab-backend', to: 'backend', filter: ['**/*'] },
-    { from: '../LICENSE', to: 'LICENSE.vocabulary-notebook.txt' },
+    { from: 'build/backend/vocove-backend', to: 'backend', filter: ['**/*'] },
+    { from: '../LICENSE', to: 'LICENSE.vocove.txt' },
     { from: 'resources', to: 'branding', filter: ['icon.png', 'icon.ico'] },
   ],
   asar: true,
@@ -37,6 +38,8 @@ module.exports = {
     ],
   },
   nsis: {
+    // 沿用旧版安装的 UUID；产品名和 AppID 改名后仍识别为原安装的升级。
+    guid: NSIS_UPGRADE_GUID,
     oneClick: false,
     perMachine: false,
     allowToChangeInstallationDirectory: true,

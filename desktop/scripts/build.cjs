@@ -1,11 +1,13 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { environmentValue } = require('../lib/compat.cjs');
 
 const root = path.resolve(__dirname, '../..');
 const desktop = path.join(root, 'desktop');
-const python = process.env.VOCAB_DESKTOP_PYTHON
-  ? path.resolve(root, process.env.VOCAB_DESKTOP_PYTHON)
+const configuredPython = environmentValue('VOCOVE_DESKTOP_PYTHON');
+const python = configuredPython
+  ? path.resolve(root, configuredPython)
   : path.join(root, '.venv-desktop', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
 const args = new Set(process.argv.slice(2));
 if ([...args].some((arg) => !['--backend-only', '--dir'].includes(arg))) {
@@ -14,7 +16,7 @@ if ([...args].some((arg) => !['--backend-only', '--dir'].includes(arg))) {
 if (!['darwin', 'win32'].includes(process.platform) || !['arm64', 'x64'].includes(process.arch)) {
   throw new Error('桌面构建需要 macOS 或 Windows 的 arm64/x64 原生环境。');
 }
-if (!fs.existsSync(python)) throw new Error('请创建 .venv-desktop 并安装 requirements-desktop.txt，或设置 VOCAB_DESKTOP_PYTHON。');
+if (!fs.existsSync(python)) throw new Error('请创建 .venv-desktop 并安装 requirements-desktop.txt，或设置 VOCOVE_DESKTOP_PYTHON。');
 
 function run(command, commandArgs, cwd = root) {
   const result = spawnSync(command, commandArgs, { cwd, stdio: 'inherit', env: process.env });

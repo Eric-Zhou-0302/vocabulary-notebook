@@ -1,13 +1,13 @@
-![Vocabulary Notebook 概念封面](assets/vocabulary-notebook-cover.jpg)
+![Vocove 概念封面](assets/vocove-cover.jpg)
 
-# Vocabulary Notebook
+# Vocove
 
-[![CI](https://github.com/Eric-Zhou-0302/vocabulary-notebook/actions/workflows/ci.yml/badge.svg)](https://github.com/Eric-Zhou-0302/vocabulary-notebook/actions/workflows/ci.yml)
+[![CI](https://github.com/Eric-Zhou-0302/vocove/actions/workflows/ci.yml/badge.svg)](https://github.com/Eric-Zhou-0302/vocove/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-一个本地优先的英文词汇笔记本：记录单词，使用 Ollama 或 DeepSeek 补全音标、中文释义与例句，再通过间隔复习巩固记忆。
+一个本地优先的英文词汇学习应用：记录单词，使用 Ollama 或 DeepSeek 补全音标、中文释义与例句，再通过间隔复习巩固记忆。
 
-当前版本：[**1.2.0**](https://github.com/Eric-Zhou-0302/vocabulary-notebook/releases/tag/v1.2.0)。默认分支上的后续改动见 [更新日志](CHANGELOG.md)。
+当前版本：[**1.2.0**](https://github.com/Eric-Zhou-0302/vocove/releases/tag/v1.2.0)。默认分支上的后续改动见 [更新日志](CHANGELOG.md)。
 
 ## 功能
 
@@ -24,14 +24,14 @@
 
 桌面版采用 Electron，内置运行环境，无需安装 Python、Node.js 或使用命令行。
 
-[下载应用 →](https://github.com/Eric-Zhou-0302/vocabulary-notebook/releases)
+[下载应用 →](https://github.com/Eric-Zhou-0302/vocove/releases)
 
 | 系统 | 安装方式 |
 | --- | --- |
 | macOS | 选择与芯片匹配的安装包（Apple Silicon / Intel），打开 `.dmg`，将应用拖入「应用程序」 |
 | Windows | 下载 `.exe` 安装包，双击并按提示完成安装 |
 
-安装后直接打开 **Vocabulary Notebook**，在「设置与工具 → 模型设置」配置 Ollama 或 DeepSeek，即可开始记录和复习单词。
+安装后直接打开 **Vocove**，在「设置与工具 → 模型设置」配置 Ollama 或 DeepSeek，即可开始记录和复习单词。
 
 ## 界面预览
 
@@ -64,8 +64,8 @@
 以下命令中的 `python` 需指向 Python 3.11 或更高版本；若本机命令为 `python3`，请相应替换。
 
 ```bash
-git clone https://github.com/Eric-Zhou-0302/vocabulary-notebook.git
-cd vocabulary-notebook
+git clone https://github.com/Eric-Zhou-0302/vocove.git
+cd vocove
 python -m pip install -r requirements.txt
 
 # 仅首次创建配置，不覆盖已有设置。
@@ -138,7 +138,7 @@ python app.py
 PDF 使用 `fpdf2` 直接生成，不依赖 HTML 模板。macOS 默认尝试系统 Arial Unicode 字体；其他环境可指定覆盖所需中文、音标的静态 TTF / OTF 字体：
 
 ```bash
-VOCABULARY_CJK_FONT=/absolute/path/to/font.ttf python app.py
+VOCOVE_CJK_FONT=/absolute/path/to/font.ttf python app.py
 ```
 
 不支持 TTC 字体集合或可变字体。字体不可用、缺少字形或单条词汇超出一页容量时，导出会明确报错，可改用 CSV / JSON。项目不打包第三方字体，使用前请确认字体授权。
@@ -222,6 +222,6 @@ docs/                     Drive 同步、桌面开发与打包指南
 
 ## 贡献与许可
 
-问题反馈请使用 [Issue 模板](https://github.com/Eric-Zhou-0302/vocabulary-notebook/issues/new/choose)。提交改动前阅读 [贡献指南](CONTRIBUTING.md)。
+问题反馈请使用 [Issue 模板](https://github.com/Eric-Zhou-0302/vocove/issues/new/choose)。提交改动前阅读 [贡献指南](CONTRIBUTING.md)。
 
 本项目采用 [MIT License](LICENSE)，Copyright © 2026 Eric Zhou。

@@ -26,10 +26,10 @@ def desktop_environment(tmp_path, monkeypatch):
     (static / "index.html").write_text("isolated desktop frontend", encoding="utf-8")
     (static / "assets" / "test.js").write_text("console.log('isolated')", encoding="utf-8")
     data = tmp_path / "desktop-data"
-    monkeypatch.setenv("VOCAB_DESKTOP_TOKEN", TOKEN)
-    monkeypatch.setenv("VOCAB_DESKTOP_DATA_DIR", str(data))
-    monkeypatch.setenv("VOCAB_DESKTOP_STATIC_DIR", str(static))
-    monkeypatch.setenv("VOCAB_DATA_FILE", str(tmp_path / "must-not-be-used.json"))
+    monkeypatch.setenv("VOCOVE_DESKTOP_TOKEN", TOKEN)
+    monkeypatch.setenv("VOCOVE_DESKTOP_DATA_DIR", str(data))
+    monkeypatch.setenv("VOCOVE_DESKTOP_STATIC_DIR", str(static))
+    monkeypatch.setenv("VOCOVE_DATA_FILE", str(tmp_path / "must-not-be-used.json"))
     monkeypatch.chdir(tmp_path)
     return data
 
@@ -38,7 +38,7 @@ def test_first_run_is_isolated_and_never_overwrites_configuration(desktop_enviro
     data = desktop_backend.prepare_environment()
     assert data == desktop_environment
     assert Path.cwd() == data
-    assert os.environ["VOCAB_DATA_FILE"] == str(data / "words.json")
+    assert os.environ["VOCOVE_DATA_FILE"] == str(data / "words.json")
     config_path = data / "config.json"
     settings = json.loads(config_path.read_text(encoding="utf-8"))
     assert settings["provider"] == "ollama"
@@ -52,11 +52,11 @@ def test_first_run_is_isolated_and_never_overwrites_configuration(desktop_enviro
 
 
 @pytest.mark.parametrize("key,value", [
-    ("VOCAB_DESKTOP_TOKEN", ""),
-    ("VOCAB_DESKTOP_TOKEN", "short-token"),
-    ("VOCAB_DESKTOP_TOKEN", "含有非ASCII" * 10),
-    ("VOCAB_DESKTOP_DATA_DIR", "relative-directory"),
-    ("VOCAB_DESKTOP_STATIC_DIR", "/nonexistent-desktop-assets"),
+    ("VOCOVE_DESKTOP_TOKEN", ""),
+    ("VOCOVE_DESKTOP_TOKEN", "short-token"),
+    ("VOCOVE_DESKTOP_TOKEN", "含有非ASCII" * 10),
+    ("VOCOVE_DESKTOP_DATA_DIR", "relative-directory"),
+    ("VOCOVE_DESKTOP_STATIC_DIR", "/nonexistent-desktop-assets"),
 ])
 def test_invalid_launch_fails_before_creating_data(desktop_environment, monkeypatch, key, value):
     monkeypatch.setenv(key, value)
@@ -70,9 +70,9 @@ def test_desktop_auth_covers_every_route(monkeypatch, path):
     monkeypatch.setattr(app, "_DESKTOP_TOKEN", TOKEN)
     client = TestClient(app.app)
     assert client.get(path).status_code == 403
-    assert client.get(path, headers={"X-Vocab-Desktop-Token": "wrong"}).status_code == 403
+    assert client.get(path, headers={"X-Vocove-Desktop-Token": "wrong"}).status_code == 403
     remote = TestClient(app.app, peer="192.0.2.1")
-    assert remote.get(path, headers={"X-Vocab-Desktop-Token": TOKEN}).status_code == 403
+    assert remote.get(path, headers={"X-Vocove-Desktop-Token": TOKEN}).status_code == 403
 
 
 def test_web_mode_has_no_desktop_health_endpoint(monkeypatch):
@@ -107,7 +107,7 @@ def test_real_desktop_launch_origin_and_shutdown(desktop_environment, shutdown):
         assert origin.startswith("http://127.0.0.1:")
         with httpx.Client(base_url=origin, timeout=5, trust_env=False) as client:
             assert client.get("/api/desktop/health").status_code == 403
-            headers = {"X-Vocab-Desktop-Token": TOKEN}
+            headers = {"X-Vocove-Desktop-Token": TOKEN}
             assert client.get("/api/desktop/health", headers=headers).json() == {"status": "ok"}
             assert client.get("/", headers=headers).text == "isolated desktop frontend"
             assert client.get("/assets/test.js", headers=headers).status_code == 200

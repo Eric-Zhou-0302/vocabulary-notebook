@@ -9,17 +9,28 @@ const { BackendProcess } = require('./lib/backend.cjs')
 const { TOKEN_HEADER, isBackendUrl, isExportUrl, isAllowedExternalUrl, authenticatedHeaders } = require('./lib/policy.cjs')
 const { sanitizePreferences } = require('./lib/preferences.cjs')
 const { rendererSmoke, waitForSmokePaint } = require('./lib/smoke.cjs')
+const { SESSION_PARTITION, LEGACY_SORT_KEY, environmentValue, clearEnvironmentValue } = require('./lib/compat.cjs')
+const { profilePlan, prepareProfile } = require('./lib/profile.cjs')
+const { backendLaunch } = require('./lib/backend-launch.cjs')
 
 const smokeTest = process.argv.includes('--smoke-test')
 const root = path.resolve(__dirname, '..')
 const brandingDirectory = app.isPackaged ? path.join(process.resourcesPath, 'branding') : path.join(__dirname, 'resources')
-app.setName(app.isPackaged ? 'Vocabulary Notebook' : 'Vocabulary Notebook Dev')
-let userData = process.env.VOCAB_DESKTOP_USER_DATA_DIR
-if (userData && !path.isAbsolute(userData)) throw new Error('VOCAB_DESKTOP_USER_DATA_DIR 必须是绝对路径')
-if (!userData && smokeTest) userData = fs.mkdtempSync(path.join(os.tmpdir(), 'vocab-desktop-smoke-'))
-userData ||= path.join(app.getPath('appData'), app.getName())
-fs.mkdirSync(userData, { recursive: true, mode: 0o700 })
-app.setPath('userData', userData)
+app.setName(app.isPackaged ? 'Vocove' : 'Vocove Dev')
+const override = environmentValue('VOCOVE_DESKTOP_USER_DATA_DIR')
+const smokeDirectory = smokeTest && !override ? fs.mkdtempSync(path.join(os.tmpdir(), 'vocove-desktop-smoke-')) : undefined
+const launch = backendLaunch({ packaged: app.isPackaged, resourcesPath: process.resourcesPath, root })
+let plan
+let ownsInstanceLock = false
+try {
+  plan = profilePlan({ appData: app.getPath('appData'), packaged: app.isPackaged, override, smokeDirectory })
+  ownsInstanceLock = prepareProfile(app, plan, launch)
+} catch (error) {
+  dialog.showErrorBox('Vocove', error.message)
+  app.exit(1)
+}
+const userData = plan.userData
+const screenshotPath = environmentValue('VOCOVE_DESKTOP_SMOKE_SCREENSHOT')
 const dataDirectory = path.join(userData, 'data')
 const preferencesFile = path.join(userData, 'desktop-preferences.json')
 const token = randomBytes(32).toString('hex')
@@ -41,7 +52,7 @@ async function savePreferences() {
   if (!mainWindow || mainWindow.isDestroyed() || !isBackendUrl(mainWindow.webContents.getURL(), origin)) return
   try {
     const snapshot = await Promise.race([
-      mainWindow.webContents.executeJavaScript(`({theme: localStorage.getItem('theme'), 'vocabulary-word-sort': localStorage.getItem('vocabulary-word-sort')})`),
+      mainWindow.webContents.executeJavaScript(`({theme: localStorage.getItem('theme'), 'vocove-word-sort': localStorage.getItem('vocove-word-sort') ?? localStorage.getItem(${JSON.stringify(LEGACY_SORT_KEY)})})`),
       new Promise(resolve => setTimeout(() => resolve(null), 1000)),
     ])
     if (snapshot === null) return
@@ -56,7 +67,7 @@ async function fail(message) {
   failing = true
   exitCode = 1
   if (smokeTest) console.error(`DESKTOP_SMOKE_FAILED ${message}`)
-  else await dialog.showMessageBox({ type: 'error', title: '词汇笔记本', message, detail: `数据目录：${dataDirectory}\n词库不会因此删除。`, buttons: ['退出'] })
+  else await dialog.showMessageBox({ type: 'error', title: 'Vocove', message, detail: `数据目录：${dataDirectory}\n词库不会因此删除。`, buttons: ['退出'] })
   app.quit()
 }
 
@@ -73,7 +84,7 @@ function download(url) {
 }
 
 function installSession() {
-  desktopSession = session.fromPartition('persist:vocabulary-notebook')
+  desktopSession = session.fromPartition(SESSION_PARTITION)
   desktopSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
   desktopSession.setPermissionCheckHandler(() => false)
   desktopSession.webRequest.onBeforeSendHeaders((details, callback) => {
@@ -98,7 +109,7 @@ function installSession() {
       const downloadDirectory = path.join(userData, 'smoke-downloads')
       fs.mkdirSync(downloadDirectory, { recursive: true })
       item.setSavePath(path.join(downloadDirectory, path.basename(item.getFilename())))
-    } else item.setSaveDialogOptions({ title: '导出词汇笔记本', defaultPath: path.join(app.getPath('downloads'), path.basename(item.getFilename())) })
+    } else item.setSaveDialogOptions({ title: '导出 Vocove 词库', defaultPath: path.join(app.getPath('downloads'), path.basename(item.getFilename())) })
     item.once('done', (_event, state) => {
       if (state === 'interrupted' && !smokeTest) dialog.showErrorBox('导出未完成', '请检查保存位置后重试。')
     })
@@ -107,7 +118,7 @@ function installSession() {
 
 function installMenu() {
   const menu = []
-  if (process.platform === 'darwin') menu.push({ label: '词汇笔记本', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] })
+  if (process.platform === 'darwin') menu.push({ label: 'Vocove', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] })
   menu.push({ label: '文件', submenu: [
     { label: '打开数据目录', click: () => shell.openPath(dataDirectory) },
     { type: 'separator' },
@@ -122,14 +133,14 @@ function installMenu() {
 async function createWindow() {
   const window = new BrowserWindow({
     width: 1180, height: 820, minWidth: 480, minHeight: 600,
-    title: '词汇笔记本', backgroundColor: '#171715', show: false,
+    title: 'Vocove', backgroundColor: '#171715', show: false,
     icon: path.join(brandingDirectory, process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences: {
       session: desktopSession, nodeIntegration: false, contextIsolation: true, sandbox: true,
       webSecurity: true, webviewTag: false, allowRunningInsecureContent: false,
       backgroundThrottling: !smokeTest,
       preload: path.join(__dirname, 'lib', 'preferences-preload.cjs'),
-      additionalArguments: [`--vocab-origin=${origin}`, `--vocab-preferences=${JSON.stringify(readPreferences())}`, `--vocab-window=${randomBytes(8).toString('hex')}`],
+      additionalArguments: [`--vocove-origin=${origin}`, `--vocove-preferences=${JSON.stringify(readPreferences())}`, `--vocove-window=${randomBytes(8).toString('hex')}`],
     },
   })
   mainWindow = window
@@ -181,10 +192,9 @@ async function runSmokeTest(window) {
   await window.webContents.executeJavaScript("void window.open('/api/words/export?format=json', '_blank')")
   result.nativeDownload = await downloaded
   await window.loadURL(origin)
-  if (process.env.VOCAB_DESKTOP_SMOKE_SCREENSHOT) window.showInactive()
+  if (screenshotPath) window.showInactive()
   result.painted = await window.webContents.executeJavaScript(`(${waitForSmokePaint.toString()})()`)
-  if (process.env.VOCAB_DESKTOP_SMOKE_SCREENSHOT) {
-    const screenshotPath = process.env.VOCAB_DESKTOP_SMOKE_SCREENSHOT
+  if (screenshotPath) {
     if (!path.isAbsolute(screenshotPath)) throw new Error('冒烟截图必须使用绝对路径')
     fs.writeFileSync(screenshotPath, (await window.webContents.capturePage()).toPNG())
   }
@@ -194,7 +204,7 @@ async function runSmokeTest(window) {
 
 async function start() {
   if (process.platform === 'darwin' && !app.isPackaged) app.dock.setIcon(path.join(brandingDirectory, 'icon.png'))
-  if (process.platform === 'win32') app.setAppUserModelId('net.ericzhou.vocabulary-notebook')
+  if (process.platform === 'win32') app.setAppUserModelId('net.ericzhou.vocove')
   fs.mkdirSync(dataDirectory, { recursive: true, mode: 0o700 })
   if (smokeTest) {
     if (fs.readdirSync(dataDirectory).length) throw new Error('冒烟验收需要空数据目录，以免读取已有词库或凭据。')
@@ -203,16 +213,10 @@ async function start() {
       deepseek: { api_key: '', model: 'deepseek-chat' },
     }), { flag: 'wx', mode: 0o600 })
   }
-  const pythonSuffix = process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
-  const projectPython = path.join(root, '.venv', pythonSuffix)
-  const command = app.isPackaged
-    ? path.join(process.resourcesPath, 'backend', process.platform === 'win32' ? 'vocab-backend.exe' : 'vocab-backend')
-    : process.env.VOCAB_DESKTOP_PYTHON || (fs.existsSync(projectPython) ? projectPython : path.join(root, '.venv-desktop', pythonSuffix))
-  const args = app.isPackaged ? [] : ['-u', path.join(root, 'desktop_backend.py')]
-  const environment = { ...process.env, VOCAB_DESKTOP_DATA_DIR: dataDirectory, VOCAB_DESKTOP_TOKEN: token, PYTHONUNBUFFERED: '1' }
-  delete environment.VOCAB_DATA_FILE
-  delete environment.VOCAB_DESKTOP_ORIGIN
-  backend = new BackendProcess(command, args, { cwd: dataDirectory, env: environment })
+  const environment = { ...process.env, VOCOVE_DESKTOP_DATA_DIR: dataDirectory, VOCOVE_DESKTOP_TOKEN: token, PYTHONUNBUFFERED: '1' }
+  clearEnvironmentValue(environment, 'VOCOVE_DATA_FILE')
+  clearEnvironmentValue(environment, 'VOCOVE_DESKTOP_ORIGIN')
+  backend = new BackendProcess(launch.command, launch.args, { cwd: dataDirectory, env: environment })
   backend.on('unexpected-exit', () => fail('本地服务意外停止，请重启应用。'))
   origin = await backend.start()
   if (quitting) return
@@ -222,7 +226,10 @@ async function start() {
   if (smokeTest && !quitting) await runSmokeTest(window)
 }
 
-if (!app.requestSingleInstanceLock()) app.quit()
+if (!ownsInstanceLock) {
+  if (plan.migrationSource && !fs.existsSync(userData)) dialog.showErrorBox('Vocove', '请先退出正在运行的桌面实例，再启动 Vocove 完成数据迁移。')
+  app.quit()
+}
 else {
   app.on('second-instance', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {

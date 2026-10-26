@@ -8,6 +8,7 @@ import WordCard from '../components/WordCard'
 import ExportMenu from '../components/ExportMenu'
 import EnrichProgress from '../components/EnrichProgress'
 import NavigationIcon from '../components/NavigationIcon'
+import { readLegacyWordSort } from '../lib/compat'
 
 export default function WordList({ searchInputRef }) {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -31,14 +32,14 @@ export default function WordList({ searchInputRef }) {
   const [date, setDate] = useState('')
   const [sort, setSort] = useState(() => {
     try {
-      const saved = localStorage.getItem('vocabulary-word-sort')
+      const saved = localStorage.getItem('vocove-word-sort') ?? readLegacyWordSort(localStorage)
       // 旧版默认顺序按添加时间升序展示，迁移时保留这一偏好。
       if (saved === '') return 'created_asc'
       return ['created_desc', 'created_asc', 'alpha_asc', 'alpha_desc'].includes(saved) ? saved : 'created_desc'
     } catch { return 'created_desc' }
   })
   useEffect(() => {
-    try { localStorage.setItem('vocabulary-word-sort', sort) } catch { /* Storage may be unavailable. */ }
+    try { localStorage.setItem('vocove-word-sort', sort) } catch { /* Storage may be unavailable. */ }
   }, [sort])
   const [letter, setLetter] = useState('')
   const [availableLetters, setAvailableLetters] = useState([])

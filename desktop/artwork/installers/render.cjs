@@ -8,7 +8,7 @@ const path = require('node:path')
 const os = require('node:os')
 
 app.commandLine.appendSwitch('force-device-scale-factor', '1')
-app.setPath('userData', fs.mkdtempSync(path.join(os.tmpdir(), 'vocab-installer-artwork-')))
+app.setPath('userData', fs.mkdtempSync(path.join(os.tmpdir(), 'vocove-installer-artwork-')))
 const outputDirectory = path.resolve(__dirname, '../../build/installer-artwork')
 const targets = [
   { name: 'dmg-background', width: 540, height: 380, scale: 1 },
