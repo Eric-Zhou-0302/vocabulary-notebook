@@ -110,7 +110,7 @@ async def _periodic_backup_loop():
             print(f"  [backup] failed: {type(e).__name__}: {e}")
 
 
-app = FastAPI(title="Vocove", version="1.2.0", lifespan=lifespan)
+app = FastAPI(title="Vocove", version="1.3.0-beta", lifespan=lifespan)
 
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
 
