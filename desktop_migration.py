@@ -5,6 +5,7 @@ import errno
 import os
 from pathlib import Path
 import shutil
+import stat
 import sys
 import tempfile
 
@@ -16,6 +17,17 @@ class MigrationError(RuntimeError):
 
 
 _ELECTRON_LOCKS = {"SingletonLock", "SingletonCookie", "SingletonSocket", "lockfile"}
+_JUNCTION_TAG = getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", 0xA0000003)
+
+
+def _is_link_or_junction(path):
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return False
+    # Python 3.11 的 is_symlink 不识别 NTFS junction，不能让目录遍历跟随它。
+    return (stat.S_ISLNK(metadata.st_mode)
+            or getattr(metadata, "st_reparse_tag", 0) == _JUNCTION_TAG)
 
 
 def _check_symlinks(root):
@@ -24,8 +36,8 @@ def _check_symlinks(root):
         if folder == root:
             directories[:] = [name for name in directories if name not in _ELECTRON_LOCKS]
             files = [name for name in files if name not in _ELECTRON_LOCKS]
-        if any((folder / name).is_symlink() for name in directories + files):
-            raise MigrationError("旧数据目录包含符号链接，自动迁移已停止；请使用完整备份导入或手动整理链接。")
+        if any(_is_link_or_junction(folder / name) for name in directories + files):
+            raise MigrationError("旧数据目录包含符号链接或目录联接，自动迁移已停止；请使用完整备份导入或手动整理链接。")
 
 
 def _publish_directory(source, destination):
@@ -56,8 +68,8 @@ def migrate_user_data(old, new):
     source, destination = Path(old), Path(new)
     if not source.is_absolute() or not destination.is_absolute():
         raise MigrationError("数据迁移需要旧目录和新目录的绝对路径。")
-    if source.is_symlink() or destination.is_symlink():
-        raise MigrationError("数据目录不能是符号链接，请使用完整备份导入。")
+    if _is_link_or_junction(source) or _is_link_or_junction(destination):
+        raise MigrationError("数据目录不能是符号链接或目录联接，请使用完整备份导入。")
     source, destination = source.resolve(), destination.resolve()
     if source == destination or source.parent != destination.parent:
         raise MigrationError("旧目录和新目录必须位于同一父目录，且名称不同。")
@@ -71,8 +83,8 @@ def migrate_user_data(old, new):
         raise MigrationError("旧数据位置不是文件夹，无法自动迁移。")
     _check_symlinks(source)
     guard = destination.parent / f".{destination.name}.migration"
-    if guard.with_suffix(".migration.lock").is_symlink():
-        raise MigrationError("迁移锁位置包含符号链接，请先检查数据目录。")
+    if _is_link_or_junction(guard.with_suffix(".migration.lock")):
+        raise MigrationError("迁移锁位置包含符号链接或目录联接，请先检查数据目录。")
     try:
         migration_lock = instance_lock.acquire(guard)
     except RuntimeError as exc:

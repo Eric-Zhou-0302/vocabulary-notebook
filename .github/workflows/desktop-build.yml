@@ -1,10 +1,16 @@
-name: Desktop packages (manual)
+name: Desktop packages
 
 on:
+  push:
+    branches: [codex/desktop-packaging]
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   package:
@@ -72,6 +78,10 @@ jobs:
             APP=$(find desktop/release -maxdepth 3 -name 'Vocove.app' -print -quit)
             "$APP/Contents/MacOS/Vocove" --smoke-test
           fi
+      - name: Verify Windows installation and uninstallation
+        if: runner.os == 'Windows'
+        timeout-minutes: 8
+        run: node desktop/scripts/test-windows-installer.cjs
       - uses: actions/upload-artifact@v4
         with:
           name: vocove-${{ matrix.label }}

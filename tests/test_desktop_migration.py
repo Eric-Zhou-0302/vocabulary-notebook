@@ -3,9 +3,11 @@ import json
 import os
 from pathlib import Path
 import queue
+import stat
 import subprocess
 import sys
 import threading
+from types import SimpleNamespace
 
 import pytest
 
@@ -28,7 +30,7 @@ def profile(tmp_path):
 
 
 def contents(directory):
-    return {str(path.relative_to(directory)): path.read_bytes()
+    return {path.relative_to(directory).as_posix(): path.read_bytes()
             for path in directory.rglob("*") if path.is_file()}
 
 
@@ -177,6 +179,58 @@ def test_symlinks_are_rejected_without_following_them(profile, tmp_path, kind):
         migration.migrate_user_data(link if kind == "source" else source, destination)
     assert not destination.exists()
     assert contents(external) == {"untouched": b"do not follow"}
+
+
+@pytest.mark.parametrize("kind", ["source", "destination", "content"])
+def test_windows_junction_metadata_is_rejected_before_resolution_or_traversal(profile, monkeypatch, kind):
+    source, destination = profile
+    junction = {"source": source, "destination": destination, "content": source / "junction"}[kind]
+    if kind == "content":
+        junction.mkdir()
+    original_lstat = Path.lstat
+
+    def lstat(path):
+        if path == junction:
+            return SimpleNamespace(st_mode=stat.S_IFDIR, st_reparse_tag=0xA0000003)
+        return original_lstat(path)
+
+    monkeypatch.setattr(Path, "lstat", lstat)
+    if kind in ("source", "destination"):
+        monkeypatch.setattr(Path, "resolve", lambda _path: pytest.fail("不得解析 junction 根目录"))
+    else:
+        scandir = migration.os.scandir
+
+        def guarded_scandir(path):
+            if Path(path) == junction:
+                pytest.fail("不得遍历 junction 指向的目录")
+            return scandir(path)
+
+        monkeypatch.setattr(migration.os, "scandir", guarded_scandir)
+    with pytest.raises(migration.MigrationError, match="目录联接"):
+        migration.migrate_user_data(source, destination)
+    assert not destination.exists()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="NTFS junction 需要 Windows 原生环境")
+@pytest.mark.parametrize("kind", ["source", "content"])
+def test_real_windows_junction_is_rejected_without_copying_its_target(profile, tmp_path, kind):
+    source, destination = profile
+    external = tmp_path / "outside-profile"
+    external.mkdir()
+    (external / "untouched").write_bytes(b"synthetic external content")
+    junction = tmp_path / "source-junction" if kind == "source" else source / "nested-junction"
+    result = subprocess.run(["cmd", "/d", "/c", "mklink", "/J", str(junction), str(external)],
+                            capture_output=True, timeout=10)
+    if result.returncode != 0:
+        pytest.skip("当前 Windows 环境不允许创建目录联接")
+    try:
+        with pytest.raises(migration.MigrationError, match="目录联接"):
+            migration.migrate_user_data(junction if kind == "source" else source, destination)
+        assert not destination.exists()
+        assert contents(external) == {"untouched": b"synthetic external content"}
+    finally:
+        # rmdir 仅移除本测试建立的联接，不进入或删除它指向的目录。
+        os.rmdir(junction)
 
 
 @pytest.mark.parametrize("target", ["same", "nested", "different-parent"])

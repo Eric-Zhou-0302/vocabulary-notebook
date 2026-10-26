@@ -53,8 +53,8 @@ test('unexpected service exit is surfaced after startup', async () => {
   await failure
 })
 
-test('startup times out and the owned process is terminated if it ignores shutdown', async () => {
-  const { child, backend } = fixture({ startTimeout: 10 })
+test('POSIX startup timeout terminates the owned process if it ignores shutdown', async () => {
+  const { child, backend } = fixture({ startTimeout: 10, platform: 'darwin' })
   await assert.rejects(backend.start(), /启动超时/)
   await backend.stop()
   assert.equal(child.signalCode, 'SIGKILL')
