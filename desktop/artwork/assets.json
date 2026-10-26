@@ -6,6 +6,8 @@
     "paper": "#f5f0e8"
   },
   "applicationIcon": {
+    "design": "Ivory tile with a charcoal folded-page V and one ochre page fold",
+    "previousDesignCommit": "c94ede5",
     "source": "icon-master.png",
     "prompt": "icon-prompt.txt",
     "method": "Built-in image_gen; PNG resized with macOS sips; native formats exported with the locked electron-builder icon converter",

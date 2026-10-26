@@ -3,10 +3,11 @@
   <rect width="164" height="314" fill="#1a1817"/>
   <path d="M0 0H164V314H138V30H0V0Z" fill="#242220"/>
   <path d="M23 31H53" stroke="#d4a853" stroke-width="2"/>
-  <!-- 沿用应用展开书本的轮廓，不绘制应用图标底板。 -->
-  <path d="M35 106C51 100 65 100 82 110C99 100 113 100 129 106V173C113 167 99 167 82 177C65 167 51 167 35 173V106Z" stroke="#d4a853" stroke-width="2.4" stroke-linejoin="round"/>
-  <path d="M82 110V177" stroke="#d4a853" stroke-width="2.4" stroke-linecap="round"/>
-  <path d="M45 116C55 113 64 115 72 119M45 128C55 125 64 127 72 131M92 119C100 115 109 113 119 116M92 131C100 127 109 125 119 128" stroke="#d4a853" stroke-opacity=".35" stroke-width="1.2" stroke-linecap="round"/>
+  <!-- 沿用 V 形双页与右上翻页折角，不绘制应用图标底板。 -->
+  <g transform="translate(35 99) scale(.94)">
+    <path d="M4 3H19C25 3 29 6 32 13L42 37C47 49 49 59 49 70C50 53 56 37 67 14C70 7 74 3 80 3L99 24C90 28 85 34 80 44L76 52C72 61 67 66 59 72L49 79C48 80 47 80 46 79L34 71C23 63 20 57 16 47L1 9C0 6 1 3 4 3Z" fill="#f5f0e8"/>
+    <path d="M80 3C83 5 94 16 98 21C99 22 100 24 99 24H91C83 24 80 21 80 15V3Z" fill="#d4a853"/>
+  </g>
   <text x="82" y="218" fill="#f5f0e8" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10.2" letter-spacing="1.35">VOCABULARY</text>
   <text x="82" y="236" fill="#f5f0e8" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10.2" letter-spacing="2.3">NOTEBOOK</text>
   <path d="M67 257H97" stroke="#d4a853" stroke-opacity=".7"/>
