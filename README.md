@@ -1,11 +1,14 @@
-![Vocove 概念封面](assets/vocove-cover.jpg)
+[![Vocove 概念封面 · 访问产品网站](assets/vocove-cover.jpg)](https://www.vocove.cn)
 
 # Vocove
 
+[![Website](https://img.shields.io/badge/Website-vocove.cn-b89962)](https://www.vocove.cn)
 [![CI](https://github.com/Eric-Zhou-0302/vocove/actions/workflows/ci.yml/badge.svg)](https://github.com/Eric-Zhou-0302/vocove/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Vocove 是一个本地优先的英文词汇学习应用。你可以按主题整理单词，使用 Ollama 或 DeepSeek 补全音标、中文释义和例句，再通过间隔复习巩固记忆。
+
+**[访问产品网站 ↗](https://www.vocove.cn)** · [下载桌面版](https://www.vocove.cn/#download) · [查看功能](https://www.vocove.cn/#features) · [常见问题](https://www.vocove.cn/#faq)
 
 当前版本：[**1.3.0**](https://github.com/Eric-Zhou-0302/vocove/releases/tag/v1.3.0)。默认分支上的后续改动见[更新日志](CHANGELOG.md)。
 
