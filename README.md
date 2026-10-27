@@ -167,3 +167,7 @@ npm --prefix frontend run dev -- --host 127.0.0.1
 问题反馈请使用 [Issue 模板](https://github.com/Eric-Zhou-0302/vocove/issues/new/choose)，提交改动前请阅读[贡献指南](CONTRIBUTING.md)。
 
 本项目采用 [MIT License](LICENSE)，Copyright © 2026 Eric Zhou。
+
+### 补全期间的编辑保护
+
+模型请求发出后，如词条被移动、重命名或所属单词本被修改，本次旧结果不会写入；无效词响应也不会删除变更后的词条。页面会提示重新补全。已有释义和复习记录保留，同步日志格式不变。
