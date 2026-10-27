@@ -1133,9 +1133,9 @@ async def _enrich_worker():
         try:
             current_data = load_words()
             current_word = next((w for w in current_data["words"] if w["id"] == word_id), None)
+            revision = _enrichment_revision(current_data, current_word) if current_word is not None else None
             if current_word is None:
                 continue
-            revision = _enrichment_revision(current_data, current_word)
             phonetic, definition, example = await enrich_word(word_text)
             if not phonetic and not definition and not example:
                 await _reject_unrecognized(word_id, word_text, revision)
