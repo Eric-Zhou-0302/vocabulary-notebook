@@ -59,6 +59,8 @@ try {
   const ratingVisible = await page.getByText(/已选择「良好」/).isVisible()
   await page.getByRole('tab', { name: /补全理解/ }).click()
   const enrichVisible = await page.getByText('AI 内容补全', { exact: true }).isVisible()
+  // 等待点击触发的平滑滚动结束，避免滚动监听覆盖紧接着的键盘切换。
+  await page.waitForTimeout(700)
   await page.getByRole('tab', { name: /补全理解/ }).focus()
   await page.keyboard.press('ArrowDown')
   const keyboardFlowWorks = await page.getByRole('tab', { name: /适时复习/ }).getAttribute('aria-selected') === 'true'
@@ -101,9 +103,9 @@ try {
     .map((link) => link.getAttribute('href'))
     .filter((href) => href !== '#' && !document.getElementById(href.slice(1))))
   const expectedDownloads = [
-    'https://github.com/Eric-Zhou-0302/vocove/releases/download/v1.3.0/Vocove-1.3.0-mac-arm64.dmg',
-    'https://github.com/Eric-Zhou-0302/vocove/releases/download/v1.3.0/Vocove-1.3.0-mac-x64.dmg',
-    'https://github.com/Eric-Zhou-0302/vocove/releases/download/v1.3.0/Vocove-1.3.0-win-x64.exe',
+    'https://github.com/Eric-Zhou-0302/vocove/releases/download/v1.4.0/Vocove-1.4.0-mac-arm64.dmg',
+    'https://github.com/Eric-Zhou-0302/vocove/releases/download/v1.4.0/Vocove-1.4.0-mac-x64.dmg',
+    'https://github.com/Eric-Zhou-0302/vocove/releases/download/v1.4.0/Vocove-1.4.0-win-x64.exe',
   ]
   const actualDownloads = await page.locator('.platform-actions a').evaluateAll((links) => links.map((link) => link.href))
   const downloadLinksValid = expectedDownloads.every((url) => actualDownloads.includes(url)) && actualDownloads.length === expectedDownloads.length

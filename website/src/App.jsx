@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 const REPO_URL = 'https://github.com/Eric-Zhou-0302/vocove'
-const RELEASE_VERSION = '1.3.0'
+const RELEASE_VERSION = '1.4.0'
 const RELEASE_URL = `${REPO_URL}/releases/tag/v${RELEASE_VERSION}`
 const DOWNLOAD_BASE_URL = `${REPO_URL}/releases/download/v${RELEASE_VERSION}`
 const DOWNLOAD_URLS = {
@@ -233,7 +233,7 @@ function Hero() {
             <div className="window-bar">
               <div className="window-dots"><span /><span /><span /></div>
               <span>Vocove</span>
-              <span className="window-version">v1.3.0</span>
+              <span className="window-version">v{RELEASE_VERSION}</span>
             </div>
             <div className="window-content">
               <aside className="demo-sidebar" aria-hidden="true">
@@ -384,8 +384,8 @@ function HowItWorks() {
 }
 
 const features = [
-  { id: 'ai', icon: 'spark', title: 'AI 补全，不停留在一个中文释义', text: '音标、释义与例句一次补齐。支持本地 Ollama 和 DeepSeek API，失败记录可以重试，也能随时手动编辑。' },
-  { id: 'notebooks', icon: 'layers', title: '每本词库，都有自己的节奏', text: '同词可加入多个单词本，每本独立保存内容与复习进度。跨本加入或移动，也有清晰的数据边界。' },
+  { id: 'ai', icon: 'spark', title: 'AI 补全，不停留在一个中文释义', text: '音标、释义与例句一次补齐，支持 Ollama 和 DeepSeek。补全期间修改词条或所属单词本，旧结果不会写回或误删内容。' },
+  { id: 'notebooks', icon: 'layers', title: '同一个词，读懂不同语境', text: '分类本用于日常整理，金融、法律、医药语境本优先生成专业释义与例句。同词可加入多本，内容与复习进度各自独立。' },
   { id: 'review', icon: 'review', title: '把复习交给记忆规律', text: 'FSRS-4.5 间隔复习、四档记忆评分、每日新词额度与复习间隔预览。也可以按字母或随机顺序自由翻卡。' },
   { id: 'export', icon: 'search', title: '找得到，也带得走', text: '搜索、筛选、排序，快速定位词条；按当前筛选导出 PDF、CSV 或 JSON，打印与二次整理都方便。' },
   { id: 'sync', icon: 'cloud', title: '需要时同步，始终可以备份', text: '可选 Google Drive 文件夹或 API 直连。完整备份包含学习历史，合并导入不会直接覆盖整个现有词库。' },
@@ -394,7 +394,7 @@ const features = [
 
 function FeatureVisual({ id }) {
   if (id === 'ai') return <div className="feature-ai-visual"><span>serendipity</span><i /><i /><i /><div><Icon name="spark" size={15} /> AI enriched</div></div>
-  if (id === 'notebooks') return <div className="notebook-stack" aria-hidden="true"><span>文学与人文 <b>24</b></span><span>科技阅读 <b>18</b></span><span>日常表达 <b>32</b></span></div>
+  if (id === 'notebooks') return <div className="notebook-stack" aria-hidden="true"><span>金融语境 <b>24</b></span><span>法律语境 <b>18</b></span><span>医药语境 <b>32</b></span></div>
   if (id === 'review') return <div className="review-timeline" aria-hidden="true"><span className="is-past">今天</span><i /><span>2 天</span><i /><span>7 天</span><i /><span>21 天</span></div>
   if (id === 'export') return <div className="export-formats" aria-hidden="true"><span>PDF</span><span>CSV</span><span>JSON</span></div>
   if (id === 'sync') return <div className="sync-visual" aria-hidden="true"><span><Icon name="shield" size={19} /> 本机词库</span><i>⇄</i><span><Icon name="cloud" size={19} /> Drive</span></div>
@@ -464,7 +464,7 @@ function DownloadSection() {
           <div className="eyebrow"><span /> START YOUR VOCABULARY PRACTICE</div>
           <h2>下一个遇见的单词，<br />就把它<em>留下来。</em></h2>
           <p>免费下载，无需注册。桌面版内置运行环境，安装即可使用。</p>
-          <div className="version-pill"><span /> 当前版本&nbsp; {RELEASE_VERSION} <i /> 2026.10.26</div>
+          <div className="version-pill"><span /> 当前版本&nbsp; {RELEASE_VERSION} <i /> 2026.10.28</div>
         </div>
         <div className="platform-grid" data-reveal>
           <article className={`platform-card ${platform === 'mac' ? 'is-recommended' : ''}`}>
@@ -503,6 +503,7 @@ const faqs = [
   { question: 'Vocove 是免费的吗？', answer: '是。Vocove 是免费开源应用，采用 MIT License。使用 DeepSeek 时产生的 API 费用由你的模型服务账户决定；本地 Ollama 的运行成本取决于你的设备与部署方式。' },
   { question: '必须联网才能使用吗？', answer: '已有词库的浏览和复习可以在本机进行。DeepSeek 内容补全与 Google Drive 同步需要联网；Ollama 是否联网取决于你的服务部署位置。' },
   { question: 'AI 功能可以直接使用吗？', answer: '首次使用需要在「设置与工具 → 模型设置」中配置 Ollama 或 DeepSeek。你可以使用本机或自托管的 Ollama，也可以填写自己的 DeepSeek API Key。未配置模型时，不影响已有词库和复习功能。' },
+  { question: '如何使用专业语境单词本？', answer: 'v1.4.0 起，新建单词本时可选择金融、法律或医药语境；分类本仍使用通用释义。类型创建后固定，改名不会切换语境。已有、移动或显式复制的内容不会自动改写，补全只填空缺字段。跨设备使用专业补全时，请将相关客户端更新至 v1.4.0 或更高版本。' },
   { question: '支持手机或平板吗？', answer: '桌面安装版目前支持 macOS 与 Windows。网页模式提供响应式布局，但需要先从源码在电脑上启动；Vocove 目前不是独立的手机 App，也没有开箱即用的公共云服务。' },
   { question: '换电脑时，学习进度能带走吗？', answer: '可以。你可以使用 Google Drive 同步，或在「同步与备份」中下载完整备份，再合并导入另一台电脑。完整备份会保存单词本与学习历史；普通 PDF、CSV 列表导出不能替代完整备份。' },
   { question: 'Mac 提示“Apple 无法验证”怎么办？', answer: '当前安装包未签名和公证。点击「完成」，进入「系统设置 → 隐私与安全性 → 安全性」，点击「仍要打开」并确认。请只从 Vocove 官方 GitHub Release 下载安装包。' },
