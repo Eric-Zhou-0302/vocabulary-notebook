@@ -29,6 +29,7 @@ from compat import getenv
 from event_broadcast import EventBroadcast
 import fsrs
 import sync_storage
+import notebook_contexts
 from drive_sync import DriveSync
 import instance_lock
 from pdf_export import DEFAULT_CJK_FONT_PATH as _CJK_FONT_PATH
@@ -315,7 +316,7 @@ def _review_stats_for(words: list[dict], now: datetime, daily_new_limit: int,
     }
 
 
-async def enrich_word(word: str) -> tuple[str, str, str]:
+async def enrich_word(word: str, context: str = "") -> tuple[str, str, str]:
     """调用配置好的 Provider 补充音标、释义和例句，返回 (phonetic, definition, example)。服务或格式错误抛出异常；仅明确的三字段空响应表示未识别词汇。"""
     logger = logging.getLogger("uvicorn")
 
@@ -395,6 +396,9 @@ primary meaning first (e.g., "pharmacy" — "药店" comes before
 
 Reply ONLY with a JSON object, no other text:
 {{"phonetic": "/.../", "definition": "n. 释义一，释义二\\nvt. 及物释义", "example": "..."}}'''
+    if context:
+        prompt += "\nDomain guidance: " + context
+
     try:
         if config.get_provider() == "ollama":
             ollama_cfg = config.get_ollama_config()
@@ -583,7 +587,7 @@ def _notebook_words(data: dict, notebook_id: str = "") -> list:
 
 
 def _notebook_response(book: dict, words: list) -> dict:
-    return {**book, "word_count": sum(word.get("notebook_id", sync_storage.DEFAULT_BOOK) == book["id"]
+    return {**book, "context_id": notebook_contexts.context_id(book["id"]), "word_count": sum(word.get("notebook_id", sync_storage.DEFAULT_BOOK) == book["id"]
                                      for word in words)}
 
 
@@ -595,6 +599,11 @@ def _notebook_fields(body: dict, data: dict, current: Optional[dict] = None) -> 
     if any(book["name"].casefold() == name.casefold() and (not current or book["id"] != current["id"])
            for book in data["notebooks"]):
         raise HTTPException(409, "已存在同名的单词本")
+    preset = _text(body, "context_id", default=notebook_contexts.context_id(current["id"]) if current else "", limit=40)
+    if preset and preset not in notebook_contexts.PRESETS:
+        raise HTTPException(422, "不支持的语境类型")
+    if current and preset != notebook_contexts.context_id(current["id"]):
+        raise HTTPException(422, "语境类型创建后不可更改，请新建单词本")
     return {"name": name, "description": description}
 
 
@@ -602,14 +611,16 @@ def _notebook_fields(body: dict, data: dict, current: Optional[dict] = None) -> 
 def list_notebooks():
     data = load_words()
     return {"notebooks": [_notebook_response(book, data["words"]) for book in data["notebooks"]],
-            "total_words": len(data["words"])}
+            "total_words": len(data["words"]),
+            "contexts": [{"id": key, **value} for key, value in notebook_contexts.PRESETS.items()]}
 
 
 @app.post("/api/notebooks")
 def create_notebook(body: dict):
     with _write_lock:
         data = load_words()
-        book = {"id": uuid.uuid4().hex[:12], **_notebook_fields(body, data), "created_at": now_iso()}
+        fields = _notebook_fields(body, data)
+        book = {"id": notebook_contexts.new_id(body.get("context_id", "").strip()), **fields, "created_at": now_iso()}
         data["notebooks"].append(book)
         save_words(data)
         return _notebook_response(book, data["words"])
@@ -1055,7 +1066,9 @@ async def create_word(body: dict):
                     detail={"message": f"「{w['word']}」已存在，已展示已有内容", **_word_response(w)},
                 )
 
-        matches = [word for word in data["words"] if word["word"].casefold() == word_lower]
+        matches = [word for word in data["words"] if word["word"].casefold() == word_lower
+                   and not notebook_contexts.context_id(notebook_id)
+                   and not notebook_contexts.context_id(word.get("notebook_id", ""))]
         source = max(matches, key=lambda word: sum(bool(word.get(key, "").strip())
                      for key in ("definition", "phonetic", "example")), default={})
         word_id = uuid.uuid4().hex[:12]
@@ -1136,7 +1149,9 @@ async def _enrich_worker():
             revision = _enrichment_revision(current_data, current_word) if current_word is not None else None
             if current_word is None:
                 continue
-            phonetic, definition, example = await enrich_word(word_text)
+            context = notebook_contexts.prompt_for(current_word.get("notebook_id", ""))
+            phonetic, definition, example = (await enrich_word(word_text, context) if context
+                                             else await enrich_word(word_text))
             if not phonetic and not definition and not example:
                 await _reject_unrecognized(word_id, word_text, revision)
                 _enrich_batch_done += 1
@@ -1451,7 +1466,7 @@ def import_library(body: dict):
             if book["id"] not in known_books:
                 if book["id"] in deleted_books:
                     original_id = book["id"]
-                    book["id"] = restored_books.setdefault(original_id, uuid.uuid4().hex[:12])
+                    book["id"] = restored_books.setdefault(original_id, notebook_contexts.new_id(notebook_contexts.context_id(original_id)))
                 data["notebooks"].append(book)
                 known_books.add(book["id"])
         known_words = {word["id"] for word in data["words"]}
