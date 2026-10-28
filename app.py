@@ -1084,14 +1084,26 @@ async def create_word(body: dict):
 
 
 
-def _discard_unrecognized_new_word(word_id):
+def _enrichment_revision(data, word):
+    """Include operation IDs so a move/edit followed by undo still invalidates a request."""
+    notebook_id = word.get("notebook_id", sync_storage.DEFAULT_BOOK)
+    book = next((b for b in data["notebooks"] if b["id"] == notebook_id), None)
+    operations = frozenset(op["id"] for op in data.get("_sync", {}).get("operations", {}).values()
+                           if (op["entity"] == "word" and op["entity_id"] == word["id"]
+                               and op["field"] in ("word", "notebook_id"))
+                           or (op["entity"] == "notebook" and op["entity_id"] == notebook_id))
+    return (word["word"], notebook_id, book, operations)
+
+
+def _discard_unrecognized_new_word(word_id, revision):
     with _write_lock:
         candidate = _new_enrichment_candidates.get(word_id)
         if candidate is None:
             return False
         data = load_words()
         current = next((w for w in data["words"] if w["id"] == word_id), None)
-        if current != candidate["word"] or _word_operation_ids(data, word_id) != candidate["operations"]:
+        if (current != candidate["word"] or _word_operation_ids(data, word_id) != candidate["operations"]
+                or _enrichment_revision(data, current) != revision):
             return False
         data["words"] = [w for w in data["words"] if w["id"] != word_id]
         save_words(data)
@@ -1099,8 +1111,8 @@ def _discard_unrecognized_new_word(word_id):
 
 
 
-async def _reject_unrecognized(word_id, word_text):
-    removed = _discard_unrecognized_new_word(word_id)
+async def _reject_unrecognized(word_id, word_text, revision):
+    removed = _discard_unrecognized_new_word(word_id, revision)
     reason = "未识别为有效词汇，已自动移除本次新增内容，请检查拼写。" if removed else "未识别为有效词汇，已有或已修改的内容已保留，请检查拼写。"
     _enrich_states[word_id] = {"status": "removed" if removed else "failed", "error": reason}
     if _event_queue is not None:
@@ -1121,11 +1133,12 @@ async def _enrich_worker():
         try:
             current_data = load_words()
             current_word = next((w for w in current_data["words"] if w["id"] == word_id), None)
+            revision = _enrichment_revision(current_data, current_word) if current_word is not None else None
             if current_word is None:
                 continue
             phonetic, definition, example = await enrich_word(word_text)
             if not phonetic and not definition and not example:
-                await _reject_unrecognized(word_id, word_text)
+                await _reject_unrecognized(word_id, word_text, revision)
                 _enrich_batch_done += 1
                 continue
 
@@ -1133,7 +1146,7 @@ async def _enrich_worker():
             ok, reason = _enrich_post_check(word_text, phonetic, definition, example)
             if not ok:
                 if reason.startswith(("word 不在英语词典", "词组中分词拼写错")):
-                    await _reject_unrecognized(word_id, word_text)
+                    await _reject_unrecognized(word_id, word_text, revision)
                     _enrich_batch_done += 1
                     continue
                 _enrich_states[word_id] = {"status": "failed", "error": reason}
@@ -1153,6 +1166,8 @@ async def _enrich_worker():
                 data = load_words()
                 for w in data["words"]:
                     if w["id"] == word_id and w["word"] == word_text:
+                        if _enrichment_revision(data, w) != revision:
+                            break
                         if phonetic and not w.get("phonetic"):
                             w["phonetic"] = phonetic
                         if definition and not w.get("definition"):
