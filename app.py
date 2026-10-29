@@ -5,6 +5,7 @@ import io
 import ipaddress
 import hmac
 import math
+import os
 import json
 import logging
 import re
@@ -16,7 +17,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -25,6 +26,7 @@ from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 import config
+import model_providers
 from compat import getenv
 from event_broadcast import EventBroadcast
 import fsrs
@@ -400,30 +402,14 @@ Reply ONLY with a JSON object, no other text:
         prompt += "\nDomain guidance: " + context
 
     try:
-        if config.get_provider() == "ollama":
-            ollama_cfg = config.get_ollama_config()
-            async with httpx.AsyncClient(timeout=120) as client:
-                resp = await client.post(ollama_cfg["url"], json={
-                    "model": ollama_cfg["model"],
-                    "prompt": prompt,
-                    "stream": False,
-                })
-                resp.raise_for_status()
-                text = resp.json()["response"].strip()
-        elif config.get_provider() == "deepseek":
-            ds_cfg = config.get_deepseek_config()
-            async with httpx.AsyncClient(timeout=120) as client:
-                resp = await client.post(
-                    "https://api.deepseek.com/chat/completions",
-                    json={
-                        "model": ds_cfg["model"],
-                        "messages": [{"role": "user", "content": prompt}],
-                        "stream": False,
-                    },
-                    headers={"Authorization": f"Bearer {ds_cfg['api_key']}"},
-                )
-                resp.raise_for_status()
-                text = resp.json()["choices"][0]["message"]["content"].strip()
+        provider = config.get_provider()
+        if provider == "ollama":
+            values = config.get_ollama_config()
+        elif provider == "deepseek":
+            values = config.get_deepseek_config()
+        else:
+            values = config.get_model_config(provider)
+        text = await model_providers.complete(model_providers.resolve(provider, values), prompt)
 
         match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
         if not match:
@@ -487,10 +473,88 @@ class DeepSeekSettings(BaseModel):
     model: str = ""
 
 
+class ProviderSettings(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    base_url: str = ""
+    model: str = ""
+    api_key: str = ""
+    clear_api_key: bool = False
+    protocol: Literal["openai", "anthropic", "ollama"] = "openai"
+    timeout: int = Field(default=120, ge=5, le=600)
+    models: list[str] = Field(default_factory=list, max_length=5000)
+
+
 class ModelSettings(BaseModel):
-    provider: Literal["ollama", "deepseek"]
+    provider: str
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
     deepseek: DeepSeekSettings = Field(default_factory=DeepSeekSettings)
+    providers: dict[str, ProviderSettings] | None = None
+
+
+class ProviderRequest(ProviderSettings):
+    provider: str
+
+
+def resolve_request(settings):
+    if settings.provider not in model_providers.PROVIDERS:
+        raise HTTPException(422, "不支持的模型供应商")
+    values = settings.model_dump(exclude={"provider"})
+    old = config.provider_values(config.load_config(), settings.provider)
+    preset = model_providers.PROVIDERS[settings.provider]
+    # 修改地址后不自动向新主机发送旧密钥或环境密钥。
+    try:
+        protocol = values["protocol"] if settings.provider == "custom" else preset["protocol"]
+        target = model_providers.normalize_url(values.get("base_url") or preset["base_url"], protocol)
+        previous_url = old.get("base_url") or old.get("url") or preset["base_url"]
+        previous_protocol = old.get("protocol", protocol) if settings.provider == "custom" else protocol
+        previous = model_providers.normalize_url(previous_url, previous_protocol) if previous_url else ""
+        inherited_key = (old.get("api_key") if not values["clear_api_key"] else "") or os.environ.get(preset["env_key"])
+        if not values["api_key"] and target != previous and inherited_key:
+            raise ValueError("API 地址已改变，请重新输入密钥后保存、测试或获取模型")
+        if not values["api_key"] and not values["clear_api_key"]:
+            values["api_key"] = old.get("api_key", "")
+        resolved = model_providers.resolve(settings.provider, values)
+        if settings.provider not in ("ollama", "custom") and not resolved["api_key"]:
+            raise ValueError("请填写 API Key 或设置环境变量")
+        return resolved
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+
+
+def provider_error(exc):
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        if status in (401, 403):
+            return HTTPException(400, "认证失败，请检查密钥、地区和访问权限")
+        if status == 429:
+            return HTTPException(429, "请求受限，请检查额度或稍后重试")
+        if status == 404:
+            return HTTPException(400, "接口或模型不存在；请检查 API 地址，或手动填写模型 ID")
+    return HTTPException(502, "模型服务请求失败，请检查地址、网络和模型配置后重试")
+
+
+@app.post("/api/model-settings/models")
+async def list_provider_models(settings: ProviderRequest):
+    resolved = resolve_request(settings)
+    try:
+        return {"models": await model_providers.discover(resolved)}
+    except Exception as exc:
+        raise provider_error(exc) from None
+
+
+@app.post("/api/model-settings/test")
+async def test_provider(settings: ProviderRequest):
+    resolved = resolve_request(settings)
+    if not settings.model.strip():
+        raise HTTPException(400, "请先选择或填写模型 ID")
+    try:
+        text = await model_providers.complete(resolved, "Reply only with OK.")
+        if not text:
+            raise ValueError("empty response")
+        return {"status": "connected"}
+    except Exception as exc:
+        raise provider_error(exc) from None
 
 
 async def deepseek_models(api_key: str) -> list[str]:
@@ -528,45 +592,40 @@ async def list_deepseek_models(settings: DeepSeekSettings):
 
 @app.put("/api/model-settings")
 async def update_model_settings(settings: ModelSettings):
-    ds = {"api_key": settings.deepseek.api_key.strip(), "model": settings.deepseek.model.strip()}
-    ollama = {"url": settings.ollama.url.strip(), "model": settings.ollama.model.strip()}
-    if settings.provider == "deepseek":
-        models = await deepseek_models(ds["api_key"] or config.get_deepseek_config().get("api_key", ""))
-        if ds["model"] not in models:
-            raise HTTPException(400, "所选模型已不在 DeepSeek 当前可用模型列表中，请刷新列表并重新选择")
-    elif not ollama["url"].startswith(("http://", "https://")):
-        raise HTTPException(400, "Ollama 地址必须以 http:// 或 https:// 开头")
+    if settings.provider not in model_providers.PROVIDERS:
+        raise HTTPException(422, "不支持的模型供应商")
+    profiles = None
+    if settings.providers is not None:
+        profiles = {name: value.model_dump() for name, value in settings.providers.items()}
+        if settings.provider not in profiles:
+            raise HTTPException(400, "缺少当前供应商配置")
+        # 地址改变时必须显式提供新密钥，避免继承凭据到其他服务。
+        resolve_request(ProviderRequest(provider=settings.provider, **profiles[settings.provider]))
     try:
-        return config.save_model_config(settings.provider, ollama, ds)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
+        return config.save_model_config(settings.provider, settings.ollama.model_dump(),
+                                        settings.deepseek.model_dump(), profiles)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
     except OSError:
-        raise HTTPException(500, "配置文件保存失败，请检查文件权限")
+        raise HTTPException(500, "配置文件保存失败，请检查文件权限") from None
 
 
 # ─── API: 健康检查 ────────────────────────────────────────
 
 @app.get("/api/health")
 async def health_check():
-    """检测当前配置的 Provider 是否可达"""
+    provider = config.get_provider()
+    result = {"provider": provider, "provider_name": model_providers.PROVIDERS[provider]["name"]}
     try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            if config.get_provider() == "ollama":
-                ollama_cfg = config.get_ollama_config()
-                # Ollama API: 用 /api/tags 检测
-                url = ollama_cfg["url"].replace("/api/generate", "/api/tags")
-                resp = await client.get(url)
-                if resp.is_success:
-                    return {"provider": "ollama", "status": "connected"}
-            elif config.get_provider() == "deepseek":
-                ds_cfg = config.get_deepseek_config()
-                models = await deepseek_models(ds_cfg["api_key"])
-                if ds_cfg["model"] not in models:
-                    return {"provider": "deepseek", "status": "model_unavailable", "model": ds_cfg["model"]}
-                return {"provider": "deepseek", "status": "connected"}
+        settings = config.get_model_config(provider)
+        models = await model_providers.discover(settings)
+        if settings["model"] not in models:
+            # 云端目录可能不是完整的可调用模型清单，不能据此宣布模型下线。
+            return {**result, "status": "model_unavailable" if provider == "ollama" else "unverified",
+                    "model": settings["model"]}
+        return {**result, "status": "connected"}
     except Exception:
-        pass
-    return {"provider": config.get_provider(), "status": "disconnected"}
+        return {**result, "status": "unverified" if provider != "ollama" else "disconnected"}
 
 
 # ─── API: 单词本 ─────────────────────────────────────────

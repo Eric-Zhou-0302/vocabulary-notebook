@@ -40,7 +40,7 @@ node --test desktop/test/*.test.cjs
 - 使用 pytest 临时目录隔离词库、配置与同步文件。
 - HTTP 路由测试使用 `tests.local_client.TestClient`，显式模拟本机连接；不要为了通过测试关闭实际来源校验。
 - 模型调用、Drive 网络与授权应使用 mock，不在默认测试中发起真实请求。
-- OAuth 回调测试会使用临时本机 HTTP 服务；Google / DeepSeek 等外部接口仍被模拟。
+- OAuth 回调测试会使用临时本机 HTTP 服务；Google 与所有模型供应商的外部接口仍被模拟。
 - 测试配置全局缓存、后台任务或队列时，恢复 monkeypatch 和任务生命周期。
 - `tests/test_prompt.py` 默认只做本地检查；`--live` 会调用已配置的模型，可能产生费用，只有手动验证时使用。
 
@@ -54,6 +54,12 @@ node --test desktop/test/*.test.cjs
 `npm test` 使用 Node 自带的测试运行器，覆盖可独立验证的 API、SSE 流与洗牌逻辑，不需要额外浏览器测试框架。
 
 修改 Hook 时检查请求取消、迟到响应、轮询重叠、定时器和监听器清理。改动布局或交互时，还需要浏览器检查：窄屏/桌面、深浅色、键盘焦点与减少动态效果。新增视觉行为的截图可放进 PR，无需提交临时截图到仓库。
+
+### 官网构建
+
+官网是 `website/` 下的独立 Vite 项目。修改官网资源后执行 `npm --prefix website run build`；应用前端仍需单独执行 `npm --prefix frontend run build`。构建使用项目现有依赖，首次准备可在 `website/` 执行 `npm ci`。
+
+官网功能介绍、FAQ、页面元信息应与实现保持一致。尚未发布的功能需明确标注版本与源码可用状态；发布成功后再同步官网 `RELEASE_VERSION`、下载链接验收脚本、README 下载入口与更新日志发布日期。桌面及应用前端版本号同时维护各自的 `package.json` 与 `package-lock.json`，官网包版本独立于应用发行版本。
 
 ### 桌面版开发与检查
 
@@ -70,7 +76,8 @@ node --test desktop/test/*.test.cjs
 | 模块 | 维护重点 |
 | --- | --- |
 | `app.py` | 路由校验、HTTP 错误语义、任务启动与退出、应用状态 |
-| `config.py` | 校验成功后发布缓存；保存失败不污染现有配置 |
+| `config.py` | 校验成功后发布缓存；保存失败不污染现有配置；旧配置兼容与密钥脱敏 |
+| `model_providers.py` | 供应商预设、环境变量、三种协议适配与模型目录；变更时同步配置示例、README 和官网 |
 | `sync_storage.py` | 操作日志合并、旧数据兼容、原子落盘 |
 | `drive_sync.py` | 同步重试、OAuth 生命周期、部分成功的进度报告 |
 | `fsrs.py` | 复习调度与历史重放一致性；更改算法需独立评估 |

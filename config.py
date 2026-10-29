@@ -6,6 +6,8 @@ import tempfile
 import threading
 from pathlib import Path
 
+import model_providers
+
 CONFIG_FILE = Path("config.json")
 _CONFIG: dict = {}
 _CONFIG_LOCK = threading.RLock()
@@ -24,18 +26,28 @@ def _validate_model_config(data: dict) -> None:
     for name in ("ollama", "deepseek", "srs", "sync"):
         _section(data, name)
     provider = data.get("provider", "")
-    if provider == "ollama":
-        ollama = _section(data, "ollama")
-        if any(not isinstance(ollama.get(key), str) or not ollama[key].strip() for key in ("url", "model")):
-            raise RuntimeError("provider=ollama 时，ollama.url 和 ollama.model 不能为空")
-    elif provider == "deepseek":
-        deepseek = _section(data, "deepseek")
-        if not isinstance(deepseek.get("api_key"), str) or not deepseek["api_key"].strip():
-            raise RuntimeError("provider=deepseek 时，deepseek.api_key 不能为空")
-        if not isinstance(deepseek.get("model"), str) or not deepseek["model"].strip():
-            raise RuntimeError("provider=deepseek 时，deepseek.model 不能为空")
-    else:
-        raise RuntimeError(f"provider 只能是 ollama 或 deepseek，当前值：{provider}")
+    if provider not in model_providers.PROVIDERS:
+        raise RuntimeError("不支持的模型供应商")
+    values = provider_values(data, provider)
+    if not isinstance(values.get("model"), str) or not values["model"].strip():
+        raise RuntimeError("模型名称不能为空")
+    try:
+        resolved = model_providers.resolve(provider, values)
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise RuntimeError("模型地址或配置格式不正确") from exc
+    if provider not in ("ollama", "custom") and not resolved["api_key"]:
+        raise RuntimeError("请填写 API Key 或设置供应商环境变量")
+
+
+def provider_values(data, provider):
+    if provider in ("ollama", "deepseek"):
+        return _section(data, provider)
+    return _section(_section(data, "providers"), provider)
+
+
+def get_model_config(provider=None):
+    provider = provider or get_provider()
+    return model_providers.resolve(provider, provider_values(load_config(), provider))
 
 
 def load_config() -> dict:
@@ -87,30 +99,71 @@ def get_sync_config() -> dict:
             "credentials_dir": sync.get("credentials_dir", ".secrets")}
 
 
+def last_builtin_provider(data):
+    builtins = [name for name in model_providers.PROVIDERS if name != "custom"]
+    if data.get("provider") in builtins:
+        return data["provider"]
+    if data.get("last_builtin_provider") in builtins:
+        return data["last_builtin_provider"]
+    return next((name for name in builtins if provider_values(data, name).get("model")), builtins[0])
+
+
 def public_config() -> dict:
-    data = copy.deepcopy(load_config())
-    ds = data.setdefault("deepseek", {})
-    ds["api_key_configured"] = bool(ds.pop("api_key", ""))
-    return {key: data.get(key, {}) for key in ("provider", "ollama", "deepseek")}
+    data = load_config()
+    profiles = {}
+    for provider, preset in model_providers.PROVIDERS.items():
+        values = copy.deepcopy(provider_values(data, provider))
+        key = values.pop("api_key", "")
+        values.update(api_key_configured=bool(key),
+                      env_key_configured=bool(os.environ.get(preset["env_key"], "").strip()))
+        values["base_url"] = values.get("base_url") or values.get("url") or preset["base_url"]
+        if provider == "ollama":
+            values["base_url"] = model_providers.normalize_url(values["base_url"], "ollama")
+        values["protocol"] = values.get("protocol", preset["protocol"]) if provider == "custom" else preset["protocol"]
+        values.setdefault("model", "")
+        values.setdefault("timeout", 120)
+        profiles[provider] = values
+    return {"provider": data["provider"], "last_builtin_provider": last_builtin_provider(data), "providers": profiles,
+            "catalog": list(model_providers.PROVIDERS.values()),
+            "ollama": profiles["ollama"], "deepseek": profiles["deepseek"]}
 
 
-def save_model_config(provider, ollama, deepseek) -> dict:
+def save_model_config(provider, ollama, deepseek, providers=None) -> dict:
     """原子落盘成功后才替换内存配置，保留其他业务设置。"""
     global _CONFIG
     with _CONFIG_LOCK:
-        if provider not in ("ollama", "deepseek"):
-            raise ValueError("provider 只能是 ollama 或 deepseek")
-        if not isinstance(ollama, dict) or not isinstance(deepseek, dict):
-            raise ValueError("模型配置必须是 JSON 对象")
+        if provider not in model_providers.PROVIDERS:
+            raise ValueError("不支持的模型供应商")
         data = copy.deepcopy(load_config())
-        ds = {**data.get("deepseek", {}), **deepseek}
-        if not deepseek.get("api_key"):
-            ds["api_key"] = data.get("deepseek", {}).get("api_key", "")
-        if provider == "deepseek" and (not ds.get("api_key") or not ds.get("model")):
-            raise ValueError("请填写 DeepSeek API Key 并选择模型")
-        if provider == "ollama" and (not ollama.get("url") or not ollama.get("model")):
-            raise ValueError("请填写 Ollama 地址和模型名称")
-        data.update(provider=provider, ollama=ollama, deepseek=ds)
+        previous_builtin = last_builtin_provider(data)
+        changes = providers if providers is not None else {"ollama": ollama, "deepseek": deepseek}
+        for name, values in changes.items():
+            if name not in model_providers.PROVIDERS or not isinstance(values, dict):
+                raise ValueError("模型配置格式不正确")
+            values = {key: value.strip() if isinstance(value, str) else value for key, value in values.items()}
+            old = provider_values(data, name)
+            merged = {**old, **values}
+            # 空值表示沿用；清除动作显式标记，避免浏览器掩码覆盖密钥。
+            if values.get("clear_api_key") and not values.get("api_key"):
+                merged["api_key"] = ""
+            elif not values.get("api_key"):
+                merged["api_key"] = old.get("api_key", "")
+            for key in ("clear_api_key", "api_key_configured", "env_key_configured"):
+                merged.pop(key, None)
+            preset = model_providers.PROVIDERS[name]
+            protocol = merged.get("protocol", preset["protocol"]) if name == "custom" else preset["protocol"]
+            merged["protocol"] = protocol
+            url = merged.get("base_url") or merged.get("url") or preset["base_url"]
+            if url:
+                merged["base_url"] = model_providers.normalize_url(url, protocol)
+            if name == "ollama" and merged.get("base_url"):
+                merged["url"] = model_providers.normalize_url(merged["base_url"], "ollama") + "/api/generate"
+            if name in ("ollama", "deepseek"):
+                data[name] = merged
+            else:
+                data.setdefault("providers", {})[name] = merged
+        data["last_builtin_provider"] = provider if provider != "custom" else previous_builtin
+        data["provider"] = provider
         try:
             _validate_model_config(data)
         except RuntimeError as exc:
