@@ -103,9 +103,9 @@ try {
     .map((link) => link.getAttribute('href'))
     .filter((href) => href !== '#' && !document.getElementById(href.slice(1))))
   const expectedDownloads = [
-    'https://github.com/Eric-Zhou-0302/vocove/releases/download/v1.4.0/Vocove-1.4.0-mac-arm64.dmg',
-    'https://github.com/Eric-Zhou-0302/vocove/releases/download/v1.4.0/Vocove-1.4.0-mac-x64.dmg',
-    'https://github.com/Eric-Zhou-0302/vocove/releases/download/v1.4.0/Vocove-1.4.0-win-x64.exe',
+    'https://github.com/Eric-Zhou-0302/vocove/releases/download/v1.5.0/Vocove-1.5.0-mac-arm64.dmg',
+    'https://github.com/Eric-Zhou-0302/vocove/releases/download/v1.5.0/Vocove-1.5.0-mac-x64.dmg',
+    'https://github.com/Eric-Zhou-0302/vocove/releases/download/v1.5.0/Vocove-1.5.0-win-x64.exe',
   ]
   const actualDownloads = await page.locator('.platform-actions a').evaluateAll((links) => links.map((link) => link.href))
   const downloadLinksValid = expectedDownloads.every((url) => actualDownloads.includes(url)) && actualDownloads.length === expectedDownloads.length

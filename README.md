@@ -10,7 +10,7 @@ Vocove 是一个本地优先的英文词汇学习应用。你可以按主题整�
 
 **[访问产品网站 ↗](https://www.vocove.cn)** · [下载桌面版](https://www.vocove.cn/#download) · [查看功能](https://www.vocove.cn/#features) · [常见问题](https://www.vocove.cn/#faq)
 
-当前版本：[**1.4.0**](https://github.com/Eric-Zhou-0302/vocove/releases/tag/v1.4.0)。下一版本 **v1.5.0** 正在准备，本文多供应商功能可从源码使用，尚未包含在上述安装包中。后续改动见[更新日志](CHANGELOG.md)。
+当前版本：[**1.5.0**](https://github.com/Eric-Zhou-0302/vocove/releases/tag/v1.5.0)。支持 15 个模型供应商及自定义 API，完整变更见[更新日志](CHANGELOG.md)。
 
 ## 功能亮点
 
@@ -31,7 +31,7 @@ Vocove 提供桌面应用和网页两种使用方式。学习数据保存在本�
 
 桌面版基于 Electron，内置运行环境，无需安装 Python、Node.js 或使用命令行。
 
-[下载 Vocove 1.4.0 →](https://github.com/Eric-Zhou-0302/vocove/releases/tag/v1.4.0)
+[下载 Vocove 1.5.0 →](https://github.com/Eric-Zhou-0302/vocove/releases/tag/v1.5.0)
 
 | 系统 | 安装方式 |
 | --- | --- |

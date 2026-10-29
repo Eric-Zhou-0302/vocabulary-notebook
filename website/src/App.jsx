@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 const REPO_URL = 'https://github.com/Eric-Zhou-0302/vocove'
-const RELEASE_VERSION = '1.4.0'
+const RELEASE_VERSION = '1.5.0'
 const RELEASE_URL = `${REPO_URL}/releases/tag/v${RELEASE_VERSION}`
 const DOWNLOAD_BASE_URL = `${REPO_URL}/releases/download/v${RELEASE_VERSION}`
 const DOWNLOAD_URLS = {
@@ -260,7 +260,7 @@ function Hero() {
 
 const flowSteps = [
   { number: '01', title: '随手记录', subtitle: 'Capture', description: '遇到生词就记下，按主题放入不同单词本。同一个词可以属于多本，各自保留学习进度。' },
-  { number: '02', title: '补全理解', subtitle: 'Enrich', description: '接入本地 Ollama 或云端模型，补全音标、中文释义与例句。v1.5.0 将支持 15 个供应商及自定义 API，现可从源码使用。' },
+  { number: '02', title: '补全理解', subtitle: 'Enrich', description: '接入本地 Ollama 或云端模型，补全音标、中文释义与例句。v1.5.0 支持 15 个供应商及自定义 API。' },
   { number: '03', title: '适时复习', subtitle: 'Remember', description: '先回忆，再翻面评分。FSRS 根据你的反馈安排下一次复习，把精力留给真正需要巩固的词。' },
 ]
 
@@ -288,7 +288,7 @@ function FlowVisual({ active }) {
         <div className="enrich-word"><strong>serendipity</strong><span>/ˌserənˈdɪpəti/</span></div>
         <div className="enrich-field"><span>中文释义</span><p>意外发现美好事物的能力；机缘巧合</p></div>
         <div className="enrich-field"><span>例句</span><p>Meeting her was pure serendipity.</p><small>与她的相遇，纯粹是一场美好的巧合。</small></div>
-        <div className="model-row"><span><i /> Ollama</span><span><i /> DeepSeek</span><small>v1.5.0 待发布 · 15 个供应商 + 自定义 API</small></div>
+        <div className="model-row"><span><i /> Ollama</span><span><i /> DeepSeek</span><small>v1.5.0 · 15 个供应商 + 自定义 API</small></div>
       </div>
     )
   }
@@ -384,7 +384,7 @@ function HowItWorks() {
 }
 
 const features = [
-  { id: 'ai', icon: 'spark', title: 'AI 补全，不停留在一个中文释义', text: '音标、释义与例句一次补齐。v1.5.0 将支持 Ollama、DeepSeek、OpenAI、Claude 等 15 个供应商及自定义 API，可获取模型目录、手动添加模型并测试连接。' },
+  { id: 'ai', icon: 'spark', title: 'AI 补全，不停留在一个中文释义', text: '音标、释义与例句一次补齐。v1.5.0 支持 Ollama、DeepSeek、OpenAI、Claude 等 15 个供应商及自定义 API，可获取模型目录、手动添加模型并测试连接。' },
   { id: 'notebooks', icon: 'layers', title: '同一个词，读懂不同语境', text: '分类本用于日常整理，金融、法律、医药语境本优先生成专业释义与例句。同词可加入多本，内容与复习进度各自独立。' },
   { id: 'review', icon: 'review', title: '把复习交给记忆规律', text: 'FSRS-4.5 间隔复习、四档记忆评分、每日新词额度与复习间隔预览。也可以按字母或随机顺序自由翻卡。' },
   { id: 'export', icon: 'search', title: '找得到，也带得走', text: '搜索、筛选、排序，快速定位词条；按当前筛选导出 PDF、CSV 或 JSON，打印与二次整理都方便。' },
@@ -464,7 +464,7 @@ function DownloadSection() {
           <div className="eyebrow"><span /> START YOUR VOCABULARY PRACTICE</div>
           <h2>下一个遇见的单词，<br />就把它<em>留下来。</em></h2>
           <p>免费下载，无需注册。桌面版内置运行环境，安装即可使用。</p>
-          <div className="version-pill"><span /> 当前版本&nbsp; {RELEASE_VERSION} <i /> 2026.10.28</div>
+          <div className="version-pill"><span /> 当前版本&nbsp; {RELEASE_VERSION} <i /> 2026.10.29</div>
         </div>
         <div className="platform-grid" data-reveal>
           <article className={`platform-card ${platform === 'mac' ? 'is-recommended' : ''}`}>
@@ -502,8 +502,8 @@ function DownloadSection() {
 const faqs = [
   { question: 'Vocove 是免费的吗？', answer: '是。Vocove 是免费开源应用，采用 MIT License。云端模型生成与连接测试产生的 API 费用由对应供应商按你的账户计费；本地 Ollama 的运行成本取决于你的设备与部署方式。' },
   { question: '必须联网才能使用吗？', answer: '已有词库的浏览和复习可以在本机进行。云端模型内容补全与 Google Drive 同步需要联网；Ollama 是否联网取决于你的服务部署位置。' },
-  { question: 'AI 功能可以直接使用吗？', answer: '首次使用需要在「设置与工具 → 模型设置」中配置模型。当前 v1.4.0 安装版支持 Ollama 和 DeepSeek。v1.5.0 支持选择供应商、填写密钥或设置环境变量、获取目录或手动添加模型 ID，并可先测试连接再保存。未配置模型时，不影响已有词库和复习功能。' },
-  { question: 'v1.5.0 支持哪些模型供应商？', answer: 'v1.5.0 尚待发布，当前可从源码运行。内置 Ollama、DeepSeek、OpenAI、Anthropic / Claude、Google Gemini、通义千问 / 百炼、Kimi / Moonshot、智谱 GLM、硅基流动、OpenRouter、Groq、Mistral AI、Together AI、Fireworks AI 和 xAI / Grok。自定义 API 支持 OpenAI Chat Completions、Anthropic Messages 和 Ollama 原生协议；可设置地址与超时，每家配置独立保留。当前 v1.4.0 安装包尚不包含此功能。' },
+  { question: 'AI 功能可以直接使用吗？', answer: '首次使用需要在「设置与工具 → 模型设置」中配置模型。v1.5.0 支持选择供应商、填写密钥或设置环境变量、获取目录或手动添加模型 ID，并可先测试连接再保存。未配置模型时，不影响已有词库和复习功能。' },
+  { question: 'v1.5.0 支持哪些模型供应商？', answer: '内置 Ollama、DeepSeek、OpenAI、Anthropic / Claude、Google Gemini、通义千问 / 百炼、Kimi / Moonshot、智谱 GLM、硅基流动、OpenRouter、Groq、Mistral AI、Together AI、Fireworks AI 和 xAI / Grok。自定义 API 支持 OpenAI Chat Completions、Anthropic Messages 和 Ollama 原生协议；可设置地址与超时，每家配置独立保留。安装版与源码版均可使用。' },
   { question: '如何使用专业语境单词本？', answer: 'v1.4.0 起，新建单词本时可选择金融、法律或医药语境；分类本仍使用通用释义。类型创建后固定，改名不会切换语境。已有、移动或显式复制的内容不会自动改写，补全只填空缺字段。跨设备使用专业补全时，请将相关客户端更新至 v1.4.0 或更高版本。' },
   { question: '支持手机或平板吗？', answer: '桌面安装版目前支持 macOS 与 Windows。网页模式提供响应式布局，但需要先从源码在电脑上启动；Vocove 目前不是独立的手机 App，也没有开箱即用的公共云服务。' },
   { question: '换电脑时，学习进度能带走吗？', answer: '可以。你可以使用 Google Drive 同步，或在「同步与备份」中下载完整备份，再合并导入另一台电脑。完整备份会保存单词本与学习历史；普通 PDF、CSV 列表导出不能替代完整备份。' },
