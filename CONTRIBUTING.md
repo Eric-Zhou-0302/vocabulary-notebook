@@ -69,6 +69,8 @@ node --test desktop/test/*.test.cjs
 
 `desktop-build.yml` 在推送到 `main` 时运行，也支持手动触发；它生成各平台构建产物，不自动创建 Release 或发布安装包。更改分发或迁移行为时，应单独说明其对本机数据和发布流程的影响。
 
+macOS 更新请求通过 `desktop/lib/electron-update-fetch.cjs` 使用 Electron `net.request`，将重定向交回下载器逐跳校验；不要换回 `net.fetch` 的 `redirect: manual`，该组合会在 GitHub 安装包跳转时报错。下载器保留 HTTPS 官方域名限制、跳转次数上限、文件大小与 SHA256 校验。
+
 更新逻辑测试使用模拟版本源、下载响应、对话框及安装回调，不访问真实词库，也不启动安装程序。源码和冒烟模式不联网检查更新；实际升级链路仍需分别在 Windows 与各 macOS 架构上验收。
 
 ## 代码结构与边界

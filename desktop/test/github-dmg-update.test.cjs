@@ -171,3 +171,34 @@ test('rate limiting is explained and a failed recheck clears the previous select
   await assert.rejects(f.source.check(), /限制了更新请求/)
   await assert.rejects(f.source.download(), /先检查/)
 })
+
+
+test('rejects unsafe redirect schemes, credentials, ports, deceptive hosts and redirect loops', async t => {
+  for (const location of [
+    'http://github.com/installer', 'file:///tmp/installer',
+    'https://github.com.evil.example/installer', 'https://user:pass@github.com/installer',
+    'https://github.com:8443/installer',
+  ]) {
+    const f = await fixture(t)
+    await f.source.check()
+    f.responses.push(new Response(null, { status: 302, headers: { location } }))
+    await assert.rejects(f.source.download(), /非官方地址/)
+    assert.equal(f.requests.length, 2)
+    assert.deepEqual(await fs.readdir(f.cacheDir), [])
+  }
+  const loop = await fixture(t)
+  await loop.source.check()
+  for (let i = 0; i < 6; i++) loop.responses.push(new Response(null, {
+    status: 302, headers: { location: 'https://github.com/loop' },
+  }))
+  await assert.rejects(loop.source.download(), /重定向无效/)
+  assert.equal(loop.requests.length, 7)
+  assert.deepEqual(await fs.readdir(loop.cacheDir), [])
+})
+
+test('does not follow redirects from the releases API', async t => {
+  const f = await fixture(t)
+  f.responses[0] = new Response(null, { status: 302, headers: { location: 'https://github.com/api' } })
+  await assert.rejects(f.source.check(), /重定向无效/)
+  assert.equal(f.requests.length, 1)
+})
