@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 const REPO_URL = 'https://github.com/Eric-Zhou-0302/vocove'
-const RELEASE_VERSION = '1.5.0'
+const RELEASE_VERSION = '1.5.1'
 const RELEASE_URL = `${REPO_URL}/releases/tag/v${RELEASE_VERSION}`
 const DOWNLOAD_BASE_URL = `${REPO_URL}/releases/download/v${RELEASE_VERSION}`
 const DOWNLOAD_URLS = {
@@ -464,7 +464,7 @@ function DownloadSection() {
           <div className="eyebrow"><span /> START YOUR VOCABULARY PRACTICE</div>
           <h2>下一个遇见的单词，<br />就把它<em>留下来。</em></h2>
           <p>免费下载，无需注册。桌面版内置运行环境，安装即可使用。</p>
-          <div className="version-pill"><span /> 当前版本&nbsp; {RELEASE_VERSION} <i /> 2026.10.29</div>
+          <div className="version-pill"><span /> 当前版本&nbsp; {RELEASE_VERSION} <i /> 2026.10.30</div>
         </div>
         <div className="platform-grid" data-reveal>
           <article className={`platform-card ${platform === 'mac' ? 'is-recommended' : ''}`}>
